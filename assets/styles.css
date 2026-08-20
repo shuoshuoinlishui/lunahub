@@ -702,6 +702,7 @@ body.theme-classic .desktop { background: #3a6ea5 !important; }
 .pv-stage img:not([src]) { display: none; }
 .pv-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
   color: #6a737b; font-size: 12px; line-height: 2; }
+.pv-empty[hidden] { display: none; }
 .pv-bar { flex: none; display: flex; align-items: center; justify-content: center; gap: 3px; padding: 5px 8px;
   background: linear-gradient(180deg, #f6f5ec, #e3e0d2); border-top: 1px solid #aca899; }
 .pv-btn { min-width: 26px; height: 24px; padding: 0 7px; font-size: 12px; line-height: 1; border: 1px solid #aca899; border-radius: 3px;
