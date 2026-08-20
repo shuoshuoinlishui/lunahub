@@ -2155,8 +2155,14 @@
   }
 
   // 示例图片：从预置壁纸提取真实图片项
+  const XP_SAMPLES = [
+    { name: 'Blue hills',    url: 'assets/samples/blue-hills.jpg' },
+    { name: 'Sunset',        url: 'assets/samples/sunset.jpg' },
+    { name: 'Water lilies',  url: 'assets/samples/water-lilies.jpg' },
+    { name: 'Winter',        url: 'assets/samples/winter.jpg' }
+  ];
   function phLoadSample() {
-    const list = [];
+    const list = XP_SAMPLES.slice();
     WALLPAPERS.forEach(w => {
       const m = /url\('([^']+)'\)/.exec(w.value || '');
       if (m) list.push({ name: w.name, url: m[1] });
