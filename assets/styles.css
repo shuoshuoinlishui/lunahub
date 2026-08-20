@@ -146,6 +146,31 @@ body[data-fs="xl"] { --fs: 15px; --fs-title: 17px; --fs-big: 20px; }
 .cat ul { list-style: none; margin: 0; padding: 0; }
 .cat li { padding: 4px 2px; border-radius: 3px; }
 .cat li:hover { background: #eef3fb; cursor: default; }
+
+/* 论坛分区导航（数据驱动） */
+.forum-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.forum-stat { font-size: var(--fs); color: #555; }
+.forum-stat b { color: #103a7a; }
+.forum-list { overflow: auto; }
+.forum-group { margin-bottom: 12px; border: 1px solid #c3d5e8; border-radius: 4px; background: #fff; overflow: hidden; }
+.forum-group-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: linear-gradient(#eef4fb, #dbe7f6); border-bottom: 1px solid #c3d5e8; }
+.forum-group-head .fg-name { font-weight: bold; color: #103a7a; font-size: var(--fs); }
+.forum-group-head .fg-cnt { font-size: 11px; color: #6a7fa0; }
+.forum-table { width: 100%; }
+.ft-row { display: grid; grid-template-columns: 1fr 56px 56px 1.3fr; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid #eef2f7; cursor: pointer; font-size: var(--fs); }
+.ft-row:nth-child(even) { background: #f7faff; }
+.ft-row:hover { background: #eef3fb; }
+.ft-row.ft-head { background: linear-gradient(#f5f8fc, #e9eff7); cursor: default; font-weight: bold; color: #5a6a82; font-size: 11px; border-bottom: 1px solid #d4ddea; }
+.ft-row.ft-head:hover { background: linear-gradient(#f5f8fc, #e9eff7); }
+.ft-board { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.ft-ico { font-size: 17px; flex: none; }
+.ft-name { color: #103a7a; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-num { text-align: center; color: #4a5a72; }
+.ft-last { min-width: 0; overflow: hidden; }
+.ft-last b { display: block; color: #245edb; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: normal; }
+.ft-last .ft-last-sub { font-size: 10px; color: #97a3b5; }
+.ft-row:hover .ft-name { text-decoration: underline; }
+
 .topic-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .cat-filter { border: 1px solid #707070; border-radius: 2px; font: inherit; font-size: var(--fs); padding: 2px 4px; background: #fff; }
 .login-hint { font-size: var(--fs); color: #9a3b3b; }

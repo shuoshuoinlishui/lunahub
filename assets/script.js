@@ -520,9 +520,14 @@
       forumCache = d;
       renderAnnouncements(d.announcements || []);
       renderCatFilter(d.categories || []);
+      if (pendingForumCat === '__ALL__') catFilter.value = '';
+      else if (pendingForumCat && (d.categories || []).indexOf(pendingForumCat) >= 0) catFilter.value = pendingForumCat;
+      pendingForumCat = null;
       renderTopicList(d.topics || []);
+      renderForums();
     } catch (e) {
       topicList.innerHTML = '<div class="empty-hint">无法连接服务器，请确认 server.js 已启动。</div>';
+      renderForums();
     }
   }
 
@@ -554,6 +559,78 @@
     topicList.innerHTML = '';
     list.forEach(t => topicList.appendChild(makeTopicItem(t)));
   }
+
+  /* ---------- 论坛分区导航（forums 窗口，数据驱动） ---------- */
+  const forumsList = document.getElementById('forumsList');
+  const forumsStat = document.getElementById('forumsStat');
+  let pendingForumCat = null;
+  // 板块图标 + 分组归属（未列出的 category 自动归入「其它」）
+  const CAT_META = {
+    '公告与指南': { ico: '📢', group: 'Lunahub 分区' },
+    '反馈与帮助': { ico: '💡', group: 'Lunahub 分区' },
+    '一般讨论':   { ico: '💬', group: 'Lunahub 分区' },
+    '资源共享区': { ico: '🧰', group: 'Lunahub 分区' },
+    'Windows（系统美化）': { ico: '🪟', group: '综合区' },
+    'UI 设计':    { ico: '🎨', group: '综合区' },
+    '没啥好说':   { ico: '🎭', group: '休息室' }
+  };
+  const GROUP_ORDER = ['Lunahub 分区', '综合区', '休息室', '其它'];
+  function catMeta(cat) { return CAT_META[cat] || { ico: '📁', group: '其它' }; }
+  function fmtRelative(ts) {
+    if (!ts) return '—';
+    const diff = Date.now() - ts;
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
+    if (diff < 2592000000) return Math.floor(diff / 86400000) + ' 天前';
+    return fmtDate(ts);
+  }
+  function renderForums() {
+    if (!forumsList) return;
+    if (!forumCache) { forumsList.innerHTML = '<div class="empty-hint">正在加载板块…</div>'; if (forumsStat) forumsStat.textContent = ''; return; }
+    const cats = forumCache.categories || [];
+    const topics = forumCache.topics || [];
+    if (!cats.length) { forumsList.innerHTML = '<div class="empty-hint">暂无板块</div>'; if (forumsStat) forumsStat.textContent = ''; return; }
+    const groups = {};
+    cats.forEach(c => { const m = catMeta(c); (groups[m.group] = groups[m.group] || []).push(c); });
+    let totalT = 0, totalR = 0;
+    forumsList.innerHTML = '';
+    GROUP_ORDER.forEach(gname => {
+      const list = groups[gname];
+      if (!list || !list.length) return;
+      const grp = document.createElement('div'); grp.className = 'forum-group';
+      const gh = document.createElement('div'); gh.className = 'forum-group-head';
+      gh.innerHTML = '<span class="fg-name">' + esc(gname) + '</span><span class="fg-cnt">' + list.length + ' 个板块</span>';
+      grp.appendChild(gh);
+      const tbl = document.createElement('div'); tbl.className = 'forum-table';
+      const hd = document.createElement('div'); hd.className = 'ft-row ft-head';
+      hd.innerHTML = '<span class="ft-board">板块</span><span class="ft-num">主题</span><span class="ft-num">回复</span><span class="ft-last">最新动态</span>';
+      tbl.appendChild(hd);
+      list.forEach(cat => {
+        const ts = topics.filter(t => t.category === cat);
+        const tc = ts.length;
+        const rc = ts.reduce((s, t) => s + (t.replyCount || 0), 0);
+        totalT += tc; totalR += rc;
+        let last = null;
+        ts.forEach(t => { if (!last || t.createdAt > last.createdAt) last = t; });
+        const m = catMeta(cat);
+        const row = document.createElement('div'); row.className = 'ft-row'; row.dataset.cat = cat;
+        row.innerHTML =
+          '<span class="ft-board"><span class="ft-ico">' + m.ico + '</span><span class="ft-name">' + esc(cat) + '</span></span>' +
+          '<span class="ft-num">' + tc + '</span>' +
+          '<span class="ft-num">' + rc + '</span>' +
+          '<span class="ft-last">' + (last ? '<b>' + esc(last.title) + '</b><span class="ft-last-sub">by ' + esc(last.author) + ' · ' + fmtRelative(last.createdAt) + '</span>' : '— 暂无 —') + '</span>';
+        row.addEventListener('click', () => openTopicCategory(cat));
+        tbl.appendChild(row);
+      });
+      grp.appendChild(tbl);
+      forumsList.appendChild(grp);
+    });
+    if (forumsStat) forumsStat.innerHTML = '共 <b>' + cats.length + '</b> 个板块 · <b>' + totalT + '</b> 主题 · <b>' + totalR + '</b> 回复';
+  }
+  function openTopicCategory(cat) { pendingForumCat = cat; WM.open('topics'); }
+  const forumsEnterAll = document.getElementById('forumsEnterAll');
+  if (forumsEnterAll) forumsEnterAll.addEventListener('click', () => { pendingForumCat = '__ALL__'; WM.open('topics'); });
 
   function avatarHtml(name, avatars) {
     const url = avatars && avatars[name];
@@ -2572,7 +2649,7 @@
 
   // 打开窗口时自动初始化对应内容
   const _openOrig = WM.open.bind(WM);
-  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'admin') openAdmin(); else if (id === 'gallery') loadGallery(); else if (id === 'account') loadAccount(); else if (id === 'music') { muRefreshAdminUI(); if (!muMediaLoaded) loadMedia(); } else if (id === 'photos') { if (!PH_LIST.length) phLoadSample(); } else if (id === 'pointer') { ptrOpen(); } };
+  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'forums') { if (!forumCache) loadForum(); else renderForums(); } else if (id === 'admin') openAdmin(); else if (id === 'gallery') loadGallery(); else if (id === 'account') loadAccount(); else if (id === 'music') { muRefreshAdminUI(); if (!muMediaLoaded) loadMedia(); } else if (id === 'photos') { if (!PH_LIST.length) phLoadSample(); } else if (id === 'pointer') { ptrOpen(); } };
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   }

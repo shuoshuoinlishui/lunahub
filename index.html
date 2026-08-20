@@ -71,39 +71,11 @@
     </div>
     <div class="menubar"><span>板块</span><span>主题</span><span>回复</span><span>最新</span></div>
     <div class="winbody">
-      <div class="cat-grid">
-        <div class="cat">
-          <h3>Lunahub 分区</h3>
-          <ul>
-            <li>📌 公告与指南</li>
-            <li>💡 反馈与帮助</li>
-            <li>💬 一般讨论</li>
-            <li>🧰 资源共享区</li>
-          </ul>
-        </div>
-        <div class="cat">
-          <h3>综合 General</h3>
-          <ul>
-            <li>🪟 Windows（系统美化）</li>
-            <li>🍎 Apple（旧设备）</li>
-            <li>🤖 Android &amp; Linux</li>
-            <li>🎨 UI 设计</li>
-            <li>💻 软件与硬件</li>
-          </ul>
-        </div>
-        <div class="cat">
-          <h3>休息室 Lounge</h3>
-          <ul>
-            <li>🎵 音乐</li>
-            <li>📚 语言与学术</li>
-            <li>🖼 影像与画廊</li>
-            <li>🌐 国际俱乐部</li>
-          </ul>
-        </div>
+      <div class="forum-toolbar">
+        <button class="xp-btn small primary" id="forumsEnterAll">💬 进入论坛（全部板块）</button>
+        <span class="forum-stat" id="forumsStat"></span>
       </div>
-      <div class="topic-actions">
-        <button class="xp-btn small primary" data-open="topics">💬 进入论坛</button>
-      </div>
+      <div id="forumsList" class="forum-list"></div>
     </div>
   </section>
 
