@@ -8,6 +8,10 @@ data/forum.json
 # 测试文件
 test_api.mjs
 
+# 日志
+server.log
+*.err.log
+
 # 系统/编辑器
 .DS_Store
 Thumbs.db
