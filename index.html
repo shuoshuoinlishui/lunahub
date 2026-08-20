@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lunahub · 网页版 Windows XP</title>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<div class="desktop" id="desktop">
+
+  <!-- 桌面图标（XP 经典：双击打开） -->
+  <div class="desk-icons" id="deskIcons">
+    <button class="dico" data-app="home"><span class="di-ico">🖥️</span><span class="di-txt">我的电脑</span></button>
+    <button class="dico" data-app="forums"><span class="di-ico">📂</span><span class="di-txt">论坛分区</span></button>
+    <button class="dico" data-app="gallery"><span class="di-ico">🖼️</span><span class="di-txt">画廊精选</span></button>
+    <button class="dico" data-app="donate"><span class="di-ico">💝</span><span class="di-txt">捐赠支持</span></button>
+    <button class="dico" data-app="about"><span class="di-ico">📝</span><span class="di-txt">关于 Lunahub</span></button>
+  </div>
+
+  <!-- ===== 窗口们（真实可拖动 / 缩放 / 聚焦） ===== -->
+
+  <!-- 我的电脑 / 欢迎 -->
+  <section class="window" id="home" data-title="我的电脑" data-icon="🖥️" style="width:460px">
+    <div class="titlebar">
+      <span class="ico">🖥️</span>
+      <span class="title">我的电脑 — Lunahub</span>
+      <span class="winbtns">
+        <button class="wb min" title="最小化">_</button>
+        <button class="wb max" title="最大化">▢</button>
+        <button class="wb close" title="关闭">✕</button>
+      </span>
+    </div>
+    <div class="menubar"><span>文件</span><span>编辑</span><span>查看</span><span>收藏</span><span>工具</span><span>帮助</span></div>
+    <div class="winbody hero-body">
+      <div class="hero-logo">
+        <div class="logo-orb">XP</div>
+        <div>
+          <h1>Lunahub</h1>
+          <p class="tagline">保存旧时代的一片净土 · 系统美化 · 复古计算</p>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="xp-btn primary" data-open="forums">浏览论坛</button>
+        <button class="xp-btn" data-open="gallery">查看画廊</button>
+        <button class="xp-btn" data-open="about">了解更多</button>
+      </div>
+      <div class="drives">
+        <div class="drive">💾<span>我的文档</span></div>
+        <div class="drive">🖴<span>本地磁盘 (C:)</span></div>
+        <div class="drive">📀<span>光盘 (D:)</span></div>
+        <div class="drive">🌐<span>网上邻居</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 论坛分区 -->
+  <section class="window" id="forums" data-title="论坛分区" data-icon="📂" style="width:520px">
+    <div class="titlebar">
+      <span class="ico">📂</span>
+      <span class="title">论坛分区 — Lunahub</span>
+      <span class="winbtns">
+        <button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button>
+      </span>
+    </div>
+    <div class="menubar"><span>板块</span><span>主题</span><span>回复</span><span>最新</span></div>
+    <div class="winbody">
+      <div class="cat-grid">
+        <div class="cat">
+          <h3>Lunahub 分区</h3>
+          <ul>
+            <li>📌 公告与指南</li>
+            <li>💡 反馈与帮助</li>
+            <li>💬 一般讨论</li>
+            <li>🧰 资源共享区</li>
+          </ul>
+        </div>
+        <div class="cat">
+          <h3>综合 General</h3>
+          <ul>
+            <li>🪟 Windows（系统美化）</li>
+            <li>🍎 Apple（旧设备）</li>
+            <li>🤖 Android &amp; Linux</li>
+            <li>🎨 UI 设计</li>
+            <li>💻 软件与硬件</li>
+          </ul>
+        </div>
+        <div class="cat">
+          <h3>休息室 Lounge</h3>
+          <ul>
+            <li>🎵 音乐</li>
+            <li>📚 语言与学术</li>
+            <li>🖼 影像与画廊</li>
+            <li>🌐 国际俱乐部</li>
+          </ul>
+        </div>
+      </div>
+      <div class="topic-actions">
+        <button class="xp-btn small primary" data-open="topics">💬 进入论坛</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 论坛 / 最近的话题（数据驱动） -->
+  <section class="window" id="topics" data-title="论坛" data-icon="💬" style="width:440px">
+    <div class="titlebar">
+      <span class="ico">💬</span>
+      <span class="title">论坛 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="menubar"><span>主题</span><span>最新</span><span>精华</span></div>
+    <div class="winbody">
+      <div id="topicListView">
+        <div class="topic-bar">
+          <button class="xp-btn small primary" id="newTopicBtn">＋ 发新话题</button>
+          <select id="catFilter" class="cat-filter"><option value="">全部板块</option></select>
+          <span class="login-hint" id="topicHint">🔒 登录后即可发帖</span>
+          <button class="xp-btn small" id="adminBtn" hidden>🛡️ 管理后台</button>
+        </div>
+        <div id="annBar" class="ann-bar"></div>
+        <div id="topicList" class="topics"></div>
+      </div>
+      <div id="topicDetailView" hidden>
+        <span class="back" id="topicBack">← 返回话题列表</span>
+        <div id="topicDetailBody"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 管理后台（仅管理员可见可用） -->
+  <section class="window" id="admin" data-title="管理后台" data-icon="🛡️" style="width:540px;height:480px">
+    <div class="titlebar">
+      <span class="ico">🛡️</span>
+      <span class="title">管理后台 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="menubar"><span>用户</span><span>公告</span><span>主题</span></div>
+    <div class="winbody admin-body">
+      <div id="adminGate" class="admin-gate" hidden>
+        <div class="admin-tabs">
+          <button class="atab active" data-tab="users">用户管理</button>
+          <button class="atab" data-tab="ann">发布公告</button>
+        </div>
+        <div id="adminUsersView">
+          <div id="adminUserList" class="admin-users"></div>
+        </div>
+        <div id="adminAnnView" hidden>
+          <div class="field"><label>公告标题</label><input id="annTitle" placeholder="一句话公告" maxlength="120"></div>
+          <div class="field"><label>公告正文</label><textarea id="annBody" placeholder="详细说明……"></textarea></div>
+          <div class="modal-actions">
+            <button class="xp-btn primary" id="annSubmit" type="button">发布</button>
+          </div>
+        </div>
+      </div>
+      <div id="adminNoPerm" class="admin-noperm">🔒 需要管理员权限才能访问此页面。<br>请使用管理员账号登录（默认 admin / admin123）。</div>
+    </div>
+  </section>
+
+  <!-- 在线聊天 -->
+  <section class="window" id="chat" data-title="在线聊天室" data-icon="🗨️" style="width:340px">
+    <div class="titlebar">
+      <span class="ico">🗨️</span>
+      <span class="title">在线聊天室</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody">
+      <div class="mchat" id="mchat">
+        <div class="msg"><b>Killer008</b>：刚发了个 Vista 概念图～</div>
+        <div class="msg"><b>V1sta</b>：回复了你的帖子 👍</div>
+        <div class="msg"><b>Gua.</b>：大家好呀 👋</div>
+      </div>
+      <div class="chat-input">
+        <input id="chatInput" placeholder="说点什么…">
+        <button class="xp-btn small" id="chatSend">发送</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 画廊 -->
+  <section class="window" id="gallery" data-title="画廊精选" data-icon="🖼️" style="width:420px">
+    <div class="titlebar">
+      <span class="ico">🖼️</span>
+      <span class="title">画廊精选 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody">
+      <div class="gallery">
+        <div class="g" style="--g1:#0058e6;--g2:#5bc0ff">Luna Glass 原型</div>
+        <div class="g" style="--g1:#7b4397;--g2:#dc2430">Longhorn 概念</div>
+        <div class="g" style="--g1:#11998e;--g2:#38ef7d">Userbar 设计</div>
+        <div class="g" style="--g1:#f7971e;--g2:#ffd200">Y2K 收藏</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 捐赠 -->
+  <section class="window" id="donate" data-title="捐赠支持" data-icon="💝" style="width:420px">
+    <div class="titlebar">
+      <span class="ico">💝</span>
+      <span class="title">捐赠支持 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody donate-body">
+      <div>
+        <p>本站为非营利社区，<b>绝不投放广告、不出售数据</b>。服务器与域名每月约需 ¥25，靠大家捐赠维持。</p>
+        <p>捐赠 ≥ ¥20 可获得 <span class="badge">捐赠者徽章</span>。</p>
+        <button class="xp-btn primary">微信扫码捐赠</button>
+      </div>
+      <div class="qr">微信<br>扫码</div>
+    </div>
+  </section>
+
+  <!-- 关于 -->
+  <section class="window" id="about" data-title="关于 Lunahub" data-icon="📝" style="width:420px">
+    <div class="titlebar">
+      <span class="ico">📝</span>
+      <span class="title">关于 Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody">
+      <p>Lunahub 是一个以 <b>Luna 美学保留</b>、系统美化与复古计算为主题的非营利论坛社区。我们致力于为小众怀旧群体保留一片净土。</p>
+      <p class="copy">© 2026 Lunahub · 样式由 WorkBuddy 生成 · 仿 Windows XP Luna 主题演示</p>
+    </div>
+  </section>
+
+  <!-- 外观和个性化 -->
+  <section class="window" id="appearance" data-title="外观和个性化" data-icon="🎨" style="width:620px;height:620px">
+    <div class="titlebar">
+      <span class="ico">🎨</span>
+      <span class="title">外观和个性化</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="menubar"><span>桌面</span><span>主题</span><span>窗口颜色</span><span>字体</span></div>
+    <div class="winbody">
+      <div class="sec-title">🎁 一键主题 <small>点一下就把壁纸 · 标题栏 · 任务栏色 · 字体都换掉</small></div>
+      <div class="theme-grid" id="themeGrid"></div>
+
+      <div class="sec-title">桌面背景</div>
+      <div class="appear-grid" id="wpGrid"></div>
+
+      <div class="sec-title">字体大小</div>
+      <div class="fs-row" id="fsRow">
+        <small>文字</small>
+        <button class="fs-btn" data-fs="sm">小</button>
+        <button class="fs-btn" data-fs="md">中</button>
+        <button class="fs-btn" data-fs="lg">大</button>
+        <button class="fs-btn" data-fs="xl">超大</button>
+        <span class="fs-sample" id="fsSample">Lunahub · 复古计算</span>
+      </div>
+
+      <div class="sec-title">窗口颜色（标题栏 / 任务栏）</div>
+      <div class="accent-row" id="accentGrid"></div>
+    </div>
+  </section>
+
+  <!-- 控制面板 -->
+  <section class="window" id="control" data-title="控制面板" data-icon="🛠️" style="width:480px;height:380px">
+    <div class="titlebar">
+      <span class="ico">🛠️</span>
+      <span class="title">控制面板</span>
+      <span class="winbtns"><button class="wb min" title="最小化">_</button><button class="wb max" title="最大化">▢</button><button class="wb close" title="关闭">✕</button></span>
+    </div>
+    <div class="menubar"><span>文件</span><span>编辑</span><span>查看</span><span>收藏</span><span>工具</span><span>帮助</span></div>
+    <div class="winbody control-body">
+      <div class="control-grid" id="controlGrid">
+        <button class="cp-item" data-cp="appearance" type="button"><span class="cp-ico">🎨</span><span class="cp-txt">外观和个性化</span></button>
+        <button class="cp-item" data-cp="taskbar" type="button"><span class="cp-ico">📊</span><span class="cp-txt">任务栏和「开始」菜单</span></button>
+        <button class="cp-item" data-cp="account" type="button"><span class="cp-ico">👤</span><span class="cp-txt">用户账户</span></button>
+        <button class="cp-item" data-cp="datetime" type="button"><span class="cp-ico">🕒</span><span class="cp-txt">日期和时间</span></button>
+        <button class="cp-item" data-cp="power" type="button"><span class="cp-ico">⏻</span><span class="cp-txt">电源选项</span></button>
+        <button class="cp-item" data-cp="logout" type="button"><span class="cp-ico">🚪</span><span class="cp-txt">注销</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 开始菜单 -->
+  <div class="startmenu" id="startMenu" hidden>
+    <button class="sm-head" id="accountBtn" type="button">
+      <div class="sm-avatar" id="smAvatar">XP</div>
+      <div class="sm-user" id="smUser">登录账户</div>
+    </button>
+    <div class="sm-body">
+      <div class="sm-col">
+        <a href="#" data-open="home">🖥️ 我的电脑</a>
+        <a href="#" data-open="forums">📂 论坛分区</a>
+        <a href="#" data-open="gallery">🖼️ 画廊精选</a>
+        <a href="#" data-open="chat">🗨️ 在线聊天</a>
+        <a href="#" data-open="topics">💬 论坛</a>
+        <a href="#" data-open="donate">💝 捐赠支持</a>
+      </div>
+      <div class="sm-col right">
+        <a href="#" id="smControl">🛠 控制面板</a>
+        <a href="#" id="smAccount">👤 账户</a>
+        <a href="#" data-open="admin">🛡️ 管理后台</a>
+        <a href="#" data-open="appearance">🎨 外观和个性化</a>
+        <a href="#" id="smLogout">🚪 注销</a>
+      </div>
+    </div>
+    <div class="sm-foot">
+      <button class="xp-btn small" id="smLogin">登录</button>
+      <button class="xp-btn small" id="smShut">关机</button>
+    </div>
+  </div>
+
+  <!-- 登录对话框 -->
+  <div class="login-overlay" id="loginOverlay" hidden>
+    <div class="window login-dialog" id="loginDialog">
+      <div class="titlebar">
+        <span class="ico">🔐</span>
+        <span class="title" id="loginTitle">登录 Lunahub</span>
+        <span class="winbtns">
+          <button class="wb close" id="loginClose" type="button">✕</button>
+        </span>
+      </div>
+      <div class="winbody login-body">
+        <div class="login-banner">
+          <div class="lb-avatar">👤</div>
+          <div><b id="loginBannerTitle">欢迎使用 Lunahub</b><br><small id="loginBannerSub">请输入您的账户信息以继续</small></div>
+        </div>
+
+        <!-- 登录面板 -->
+        <div id="loginPanel">
+          <label class="login-field">用户名：
+            <input id="loginUser" type="text" placeholder="用户名" autocomplete="username">
+          </label>
+          <label class="login-field">密　码：
+            <input id="loginPass" type="password" placeholder="密码" autocomplete="current-password">
+          </label>
+          <div class="login-msg" id="loginMsg"></div>
+          <div class="login-actions">
+            <button class="xp-btn primary" id="loginSubmit" type="button">登录</button>
+            <button class="xp-btn" id="loginCancel" type="button">取消</button>
+          </div>
+          <div class="login-reg">还没有账号？<a href="#" id="loginReg">立即注册</a></div>
+        </div>
+
+        <!-- 注册面板 -->
+        <div id="regPanel" hidden>
+          <label class="login-field">用户名：
+            <input id="regUser" type="text" placeholder="3-20 位：中文 / 字母 / 数字 / 下划线" autocomplete="username" maxlength="20">
+          </label>
+          <label class="login-field">密　码：
+            <input id="regPass" type="password" placeholder="至少 6 位" autocomplete="new-password">
+          </label>
+          <label class="login-field">确认密码：
+            <input id="regPass2" type="password" placeholder="再次输入密码" autocomplete="new-password">
+          </label>
+          <div class="login-msg" id="regMsg"></div>
+          <div class="login-actions">
+            <button class="xp-btn primary" id="regSubmit" type="button">注册</button>
+            <button class="xp-btn" id="regCancel" type="button">取消</button>
+          </div>
+          <div class="login-reg">已有账号？<a href="#" id="regBack">去登录</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 发新话题模态 -->
+  <div class="modal-overlay" id="topicOverlay" hidden>
+    <div class="window modal" id="topicModal">
+      <div class="titlebar">
+        <span class="ico">＋</span>
+        <span class="title">发新话题</span>
+        <span class="winbtns">
+          <button class="wb close" id="topicClose" type="button">✕</button>
+        </span>
+      </div>
+      <div class="winbody">
+        <div class="field">
+          <label>标题</label>
+          <input id="ntTitle" type="text" placeholder="一句话说清你的话题" maxlength="80">
+        </div>
+        <div class="field">
+          <label>板块（可选，可输入新板块）</label>
+          <input id="ntCat" list="catList" placeholder="选择或输入新板块" autocomplete="off" maxlength="20">
+          <datalist id="catList"></datalist>
+        </div>
+        <div class="field">
+          <label>正文</label>
+          <textarea id="ntBody" placeholder="详细说说……（支持纯文本）"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="xp-btn" id="topicCancel" type="button">取消</button>
+          <button class="xp-btn primary" id="topicSubmit" type="button">发布</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 桌面右键菜单 -->
+  <div class="ctx-menu" id="ctxMenu" hidden>
+    <div class="ci has-sub" data-act="arrange"><span class="ic">⚏</span>排列图标(<u>I</u>)<span class="arr">▶</span>
+      <div class="ctx-sub" hidden>
+        <div class="ci" data-sub="arr-name"><span class="ic"></span>名称(<u>N</u>)</div>
+        <div class="ci" data-sub="arr-size"><span class="ic"></span>大小(<u>S</u>)</div>
+        <div class="ci" data-sub="arr-type"><span class="ic"></span>类型(<u>T</u>)</div>
+        <div class="ci" data-sub="arr-date"><span class="ic"></span>修改时间(<u>M</u>)</div>
+        <div class="sep"></div>
+        <div class="ci check" data-sub="arr-auto"><span class="ic">✓</span>自动排列(<u>A</u>)</div>
+        <div class="ci check" data-sub="arr-grid"><span class="ic">✓</span>对齐到网格(<u>K</u>)</div>
+      </div>
+    </div>
+    <div class="ci" data-act="refresh"><span class="ic">🔄</span>刷新(<u>E</u>)<span class="short">F5</span></div>
+    <div class="sep"></div>
+    <div class="ci disabled"><span class="ic">📋</span>粘贴(<u>P</u>)<span class="short">Ctrl+V</span></div>
+    <div class="ci disabled"><span class="ic">🔗</span>粘贴快捷方式(<u>S</u>)</div>
+    <div class="sep"></div>
+    <div class="ci has-sub" data-act="new"><span class="ic">✨</span>新建(<u>W</u>)<span class="arr">▶</span>
+      <div class="ctx-sub" hidden>
+        <div class="ci" data-sub="new-txt"><span class="ic">📄</span>文本文档</div>
+      </div>
+    </div>
+    <div class="sep"></div>
+    <div class="ci" data-act="personalize"><span class="ic">🎨</span>个性化</div>
+    <div class="ci" data-act="properties"><span class="ic">🖥️</span>属性(<u>R</u>)</div>
+  </div>
+
+  <!-- 任务栏 -->
+  <div class="taskbar">
+    <button class="start" id="startBtn">
+      <span class="start-flag"><span></span><span></span><span></span><span></span></span>
+      开始
+    </button>
+    <div class="quicklaunch">
+      <a class="ql" data-open="home" title="我的电脑">🖥️</a>
+      <a class="ql" data-open="forums" title="论坛">📂</a>
+      <a class="ql" data-open="topics" title="论坛">💬</a>
+      <a class="ql" data-open="gallery" title="画廊">🖼️</a>
+      <a class="ql" data-open="donate" title="捐赠">💝</a>
+      <a class="ql" data-open="about" title="关于">📝</a>
+    </div>
+    <div class="running" id="running"></div>
+    <div class="tray">
+      <span title="音量">🔊</span>
+      <span title="网络" class="tray-net">📶</span>
+      <button class="tray-user" id="trayLogin" type="button" title="登录账户">👤<span>登录</span></button>
+      <span class="clock" id="clock">--:--</span>
+    </div>
+  </div>
+
+</div>
+
+<script src="assets/script.js"></script>
+</body>
+</html>

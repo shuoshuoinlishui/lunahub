@@ -1,0 +1,1139 @@
+// ===== Lunahub · 网页版 Windows XP 窗口管理器 =====
+(function () {
+  'use strict';
+
+  const desktop = document.getElementById('desktop');
+  const running = document.getElementById('running');
+  const taskbarH = 32;
+  let zTop = 50;
+  let cascade = 0;
+
+  const APPS = {
+    home:    { icon: '🖥️', title: '我的电脑' },
+    forums:  { icon: '📂', title: '论坛分区' },
+    topics:  { icon: '💬', title: '论坛' },
+    chat:    { icon: '🗨️', title: '在线聊天室' },
+    gallery: { icon: '🖼️', title: '画廊精选' },
+    donate:  { icon: '💝', title: '捐赠支持' },
+    about:   { icon: '📝', title: '关于 Lunahub' },
+    appearance: { icon: '🎨', title: '外观和个性化' },
+    control:    { icon: '🛠️', title: '控制面板' },
+    admin:     { icon: '🛡️', title: '管理后台' }
+  };
+
+  /* ---------- 窗口对象 ---------- */
+  class Win {
+    constructor(el) {
+      this.el = el;
+      this.id = el.id;
+      this.taskBtn = null;
+      this.prevRect = null;
+      this.makeResizeHandles();
+      this.bind();
+      el.classList.add('closed');
+    }
+
+    get title() {
+      const t = this.el.querySelector('.title');
+      return t ? t.textContent : (APPS[this.id] ? APPS[this.id].title : this.id);
+    }
+
+    makeResizeHandles() {
+      ['n','s','e','w','ne','nw','se','sw'].forEach(dir => {
+        const h = document.createElement('div');
+        h.className = 'rz ' + dir;
+        h.dataset.dir = dir;
+        this.el.appendChild(h);
+        h.addEventListener('pointerdown', e => this.startResize(e, dir));
+      });
+    }
+
+    bind() {
+      const bar = this.el.querySelector('.titlebar');
+      bar.addEventListener('pointerdown', e => this.startDrag(e));
+      bar.addEventListener('dblclick', e => {
+        if (e.target.closest('.wb')) return;
+        this.toggleMax();
+      });
+      this.el.querySelectorAll('.wb').forEach(b => {
+        b.addEventListener('click', e => {
+          e.stopPropagation();
+          if (b.classList.contains('min')) this.minimize();
+          else if (b.classList.contains('max')) this.toggleMax();
+          else if (b.classList.contains('close')) this.close();
+        });
+      });
+      this.el.addEventListener('pointerdown', () => WM.focus(this.id), true);
+    }
+
+    open() {
+      if (this.el.classList.contains('closed')) {
+        this.el.classList.remove('closed');
+        if (!this.el.style.left) this.place();
+      }
+      WM.focus(this.id);
+      this.ensureTaskBtn();
+      if (this.taskBtn) this.taskBtn.style.display = '';
+    }
+
+    place() {
+      const w = this.el.offsetWidth || 420;
+      const h = this.el.offsetHeight || 300;
+      const dw = desktop.clientWidth, dh = desktop.clientHeight - taskbarH;
+      let left = Math.round((dw - w) / 2) + (cascade % 5) * 26 - 52;
+      let top = Math.round((dh - h) / 3) + (cascade % 5) * 26;
+      left = Math.max(4, Math.min(left, dw - w - 4));
+      top = Math.max(4, Math.min(top, dh - 40));
+      this.el.style.left = left + 'px';
+      this.el.style.top = top + 'px';
+      this.el.style.height = Math.min(h, dh - 20) + 'px';
+      cascade++;
+    }
+
+    ensureTaskBtn() {
+      if (this.taskBtn) return;
+      const meta = APPS[this.id] || { icon: '📄', title: this.title };
+      const b = document.createElement('button');
+      b.className = 'task-btn';
+      b.innerHTML = '<span>' + meta.icon + '</span><span>' + this.title + '</span>';
+      b.addEventListener('click', () => {
+        if (this.el.classList.contains('closed')) { this.open(); return; }
+        if (WM.active === this.id) this.minimize();
+        else WM.focus(this.id);
+      });
+      running.appendChild(b);
+      this.taskBtn = b;
+    }
+
+    minimize() {
+      this.el.classList.add('closed');
+      if (this.taskBtn) this.taskBtn.classList.remove('active');
+      WM.active = null;
+      WM.focusTop();
+    }
+
+    close() {
+      this.el.classList.add('closed');
+      if (this.taskBtn) this.taskBtn.style.display = 'none';
+      if (WM.active === this.id) { WM.active = null; WM.focusTop(); }
+    }
+
+    toggleMax() {
+      if (this.el.classList.contains('maximized')) {
+        this.el.classList.remove('maximized');
+        if (this.prevRect) Object.assign(this.el.style, this.prevRect);
+      } else {
+        this.prevRect = {
+          left: this.el.style.left, top: this.el.style.top,
+          width: this.el.style.width, height: this.el.style.height
+        };
+        this.el.classList.add('maximized');
+      }
+      WM.focus(this.id);
+    }
+
+    startDrag(e) {
+      if (e.target.closest('.wb')) return;
+      if (this.el.classList.contains('maximized')) return;
+      WM.focus(this.id);
+      this.el.classList.add('dragging');
+      const r = this.el.getBoundingClientRect();
+      const offX = e.clientX - r.left, offY = e.clientY - r.top;
+      const dh = desktop.clientHeight - taskbarH;
+      const move = ev => {
+        let x = ev.clientX - offX, y = ev.clientY - offY;
+        x = Math.max(-r.width + 60, Math.min(x, desktop.clientWidth - 60));
+        y = Math.max(0, Math.min(y, dh - 28));
+        this.el.style.left = x + 'px';
+        this.el.style.top = y + 'px';
+      };
+      const up = () => {
+        this.el.classList.remove('dragging');
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    }
+
+    startResize(e, dir) {
+      e.stopPropagation();
+      if (this.el.classList.contains('maximized')) return;
+      WM.focus(this.id);
+      this.el.classList.add('dragging');
+      const r = this.el.getBoundingClientRect();
+      const sx = e.clientX, sy = e.clientY;
+      const sw = r.width, sh = r.height, sl = r.left, st = r.top;
+      const move = ev => {
+        const dx = ev.clientX - sx, dy = ev.clientY - sy;
+        let nl = sl, nt = st, nw = sw, nh = sh;
+        if (dir.includes('e')) nw = Math.max(240, sw + dx);
+        if (dir.includes('s')) nh = Math.max(120, sh + dy);
+        if (dir.includes('w')) { nw = Math.max(240, sw - dx); nl = sl + (sw - nw); }
+        if (dir.includes('n')) { nh = Math.max(120, sh - dy); nt = st + (sh - nh); }
+        const dh = desktop.clientHeight - taskbarH;
+        nt = Math.max(0, Math.min(nt, dh - 28));
+        this.el.style.left = nl + 'px';
+        this.el.style.top = nt + 'px';
+        this.el.style.width = nw + 'px';
+        this.el.style.height = nh + 'px';
+      };
+      const up = () => {
+        this.el.classList.remove('dragging');
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    }
+  }
+
+  /* ---------- 窗口管理器 ---------- */
+  const WM = {
+    wins: {},
+    active: null,
+    register(id) {
+      const el = document.getElementById(id);
+      if (el) this.wins[id] = new Win(el);
+    },
+    open(id) { if (this.wins[id]) this.wins[id].open(); },
+    focus(id) {
+      const w = this.wins[id];
+      if (!w) return;
+      zTop++;
+      w.el.style.zIndex = zTop;
+      Object.values(this.wins).forEach(o => {
+        o.el.classList.toggle('active', o === w);
+        if (o.taskBtn) o.taskBtn.classList.toggle('active', o === w);
+      });
+      this.active = id;
+    },
+    focusTop() {
+      let top = null, max = -1;
+      Object.values(this.wins).forEach(o => {
+        if (!o.el.classList.contains('closed') &&
+            parseInt(o.el.style.zIndex || 0) > max) { max = parseInt(o.el.style.zIndex || 0); top = o.id; }
+      });
+      if (top) this.focus(top);
+    }
+  };
+
+  Object.keys(APPS).forEach(id => WM.register(id));
+
+  // 轻量提示气泡（控制面板“日期和时间”等用）
+  function showMsgToast(msg) {
+    let t = document.getElementById('toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'toast';
+      t.style.cssText = 'position:fixed;left:50%;bottom:48px;transform:translateX(-50%);' +
+        'background:#fffbe6;border:1px solid #e0c97a;color:#5a4a00;padding:8px 16px;border-radius:4px;' +
+        'box-shadow:0 2px 8px rgba(0,0,0,.3);font-size:12px;z-index:200;display:none;';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.display = 'block';
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.display = 'none'; }, 2600);
+  }
+
+  /* ---------- 桌面图标 / 快速启动 / 开始菜单项：打开应用 ---------- */
+  document.querySelectorAll('[data-open]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.preventDefault();
+      WM.open(el.dataset.open);
+      closeStart();
+    });
+  });
+
+  const dicos = document.querySelectorAll('.dico');
+  dicos.forEach(d => {
+    d.addEventListener('click', () => {
+      dicos.forEach(x => x.classList.remove('sel'));
+      d.classList.add('sel');
+    });
+    d.addEventListener('dblclick', () => WM.open(d.dataset.app));
+  });
+  desktop.addEventListener('click', e => {
+    if (e.target === desktop) dicos.forEach(x => x.classList.remove('sel'));
+  });
+
+  /* ---------- 开始菜单 ---------- */
+  const startBtn = document.getElementById('startBtn');
+  const startMenu = document.getElementById('startMenu');
+  function openStart() { startMenu.hidden = false; startBtn.classList.add('active'); }
+  function closeStart() { startMenu.hidden = true; startBtn.classList.remove('active'); }
+  startBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    startMenu.hidden ? openStart() : closeStart();
+  });
+  document.addEventListener('click', e => {
+    if (!startMenu.hidden && !startMenu.contains(e.target) && e.target !== startBtn) closeStart();
+  });
+
+  /* ---------- 登录系统（带本地持久化） ---------- */
+  const loginOverlay = document.getElementById('loginOverlay');
+  const loginUser = document.getElementById('loginUser');
+  const loginPass = document.getElementById('loginPass');
+  const smUser = document.getElementById('smUser');
+  const smAvatar = document.getElementById('smAvatar');
+  const trayLogin = document.getElementById('trayLogin');
+  const newTopicBtn = document.getElementById('newTopicBtn');
+  const topicHint = document.getElementById('topicHint');
+  const chatInput = document.getElementById('chatInput');
+  const chatSend = document.getElementById('chatSend');
+  const mchat = document.getElementById('mchat');
+  const SAVE_KEY = 'lunahub_user';
+  const TOKEN_KEY = 'lunahub_token';
+  const ROLE_KEY = 'lunahub_role';
+
+  let loggedIn = false;
+  let authToken = null;
+  let authRole = null;
+
+  function setUserUI(u) {
+    smUser.textContent = u;
+    smAvatar.textContent = u.slice(0, 2).toUpperCase();
+    trayLogin.innerHTML = '👤<span>' + u + '</span>';
+    trayLogin.title = '已登录：' + u;
+    updateAuthUI();
+  }
+  function currentUser() { return loggedIn ? smUser.textContent : null; }
+  function updateAuthUI() {
+    if (newTopicBtn) { newTopicBtn.disabled = !loggedIn; topicHint.style.display = loggedIn ? 'none' : 'inline'; }
+    if (chatInput) { chatInput.disabled = !loggedIn; chatInput.placeholder = loggedIn ? '说点什么…' : '请先登录后再发言'; }
+    if (chatSend) chatSend.disabled = !loggedIn;
+    if (typeof adminBtn !== 'undefined' && adminBtn) adminBtn.hidden = authRole !== 'admin';
+  }
+  /* ---------- 登录 / 注册（接后端账号系统） ---------- */
+  const loginPanel = document.getElementById('loginPanel');
+  const regPanel = document.getElementById('regPanel');
+  const loginMsg = document.getElementById('loginMsg');
+  const regMsg = document.getElementById('regMsg');
+  const loginTitle = document.getElementById('loginTitle');
+  const loginBannerTitle = document.getElementById('loginBannerTitle');
+  const loginBannerSub = document.getElementById('loginBannerSub');
+  const loginSubmit = document.getElementById('loginSubmit');
+  const regUser = document.getElementById('regUser');
+  const regPass = document.getElementById('regPass');
+  const regPass2 = document.getElementById('regPass2');
+  const regSubmit = document.getElementById('regSubmit');
+
+  function showMsg(el, msg) { el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none'; }
+  function showLoginPanel() {
+    loginPanel.hidden = false; regPanel.hidden = true;
+    loginTitle.textContent = '登录 Lunahub';
+    loginBannerTitle.textContent = '欢迎使用 Lunahub';
+    loginBannerSub.textContent = '请输入您的账户信息以继续';
+    showMsg(loginMsg, ''); loginUser.focus();
+  }
+  function showRegPanel() {
+    loginPanel.hidden = true; regPanel.hidden = false;
+    loginTitle.textContent = '注册 Lunahub';
+    loginBannerTitle.textContent = '创建新账号';
+    loginBannerSub.textContent = '加入 Lunahub，参与论坛讨论';
+    showMsg(regMsg, ''); regUser.focus();
+  }
+  async function postJSON(url, obj) {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) });
+    let data = {};
+    try { data = await r.json(); } catch (e) {}
+    return { status: r.status, ok: r.ok, data };
+  }
+
+  function openLogin() { closeStart(); showLoginPanel(); loginOverlay.hidden = false; }
+  function closeLogin() {
+    loginOverlay.hidden = true;
+    loginPass.value = ''; regPass.value = ''; regPass2.value = '';
+    showLoginPanel();
+  }
+  async function doLogin() {
+    const u = loginUser.value.trim();
+    if (!u) { showMsg(loginMsg, '请输入用户名'); loginUser.focus(); return; }
+    if (!loginPass.value) { showMsg(loginMsg, '请输入密码'); loginPass.focus(); return; }
+    loginSubmit.disabled = true;
+    const res = await postJSON('/api/login', { user: u, pass: loginPass.value });
+    loginSubmit.disabled = false;
+    if (res.ok) {
+      loggedIn = true; setUserUI(u);
+      authToken = res.data.token; authRole = res.data.role;
+      try { localStorage.setItem(SAVE_KEY, u); localStorage.setItem(TOKEN_KEY, res.data.token); localStorage.setItem(ROLE_KEY, res.data.role); } catch (e) {}
+      closeLogin();
+      if (typeof topicListView !== 'undefined' && topicListView && !topicListView.hidden) loadForum();
+    } else {
+      showMsg(loginMsg, (res.data && res.data.error) || '用户名或密码错误');
+    }
+  }
+  async function doRegister() {
+    const u = regUser.value.trim();
+    const p = regPass.value, p2 = regPass2.value;
+    if (!/^[一-龥A-Za-z0-9_]{3,20}$/.test(u)) { showMsg(regMsg, '用户名需 3-20 位（中文/字母/数字/下划线）'); regUser.focus(); return; }
+    if (p.length < 6) { showMsg(regMsg, '密码至少 6 位'); regPass.focus(); return; }
+    if (p !== p2) { showMsg(regMsg, '两次输入的密码不一致'); regPass2.focus(); return; }
+    regSubmit.disabled = true;
+    const res = await postJSON('/api/register', { user: u, pass: p });
+    regSubmit.disabled = false;
+    if (res.ok) {
+      loggedIn = true; setUserUI(u);
+      authToken = res.data.token; authRole = res.data.role;
+      try { localStorage.setItem(SAVE_KEY, u); localStorage.setItem(TOKEN_KEY, res.data.token); localStorage.setItem(ROLE_KEY, res.data.role); } catch (e) {}
+      closeLogin();
+      if (typeof topicListView !== 'undefined' && topicListView && !topicListView.hidden) loadForum();
+    } else {
+      showMsg(regMsg, (res.data && res.data.error) || '注册失败');
+    }
+  }
+  function doLogout() {
+    loggedIn = false;
+    authToken = null; authRole = null;
+    try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(ROLE_KEY); } catch (e) {}
+    smUser.textContent = '登录账户';
+    smAvatar.textContent = 'XP';
+    trayLogin.innerHTML = '👤<span>登录</span>';
+    trayLogin.title = '登录账户';
+    updateAuthUI();
+    if (typeof topicListView !== 'undefined' && topicListView && !topicListView.hidden) loadForum();
+  }
+
+  document.getElementById('trayLogin').addEventListener('click', openLogin);
+  document.getElementById('accountBtn').addEventListener('click', openLogin);
+  document.getElementById('loginClose').addEventListener('click', closeLogin);
+  document.getElementById('loginCancel').addEventListener('click', closeLogin);
+  document.getElementById('loginSubmit').addEventListener('click', doLogin);
+  document.getElementById('smLogout').addEventListener('click', e => { e.preventDefault(); doLogout(); });
+  document.getElementById('smAccount').addEventListener('click', e => { e.preventDefault(); openLogin(); });
+  document.getElementById('smControl').addEventListener('click', e => { e.preventDefault(); closeStart(); WM.open('control'); });
+  // 控制面板里的各个小程序
+  const controlGrid = document.getElementById('controlGrid');
+  if (controlGrid) {
+    controlGrid.addEventListener('click', e => {
+      const btn = e.target.closest('.cp-item');
+      if (!btn) return;
+      const act = btn.dataset.cp;
+      if (act === 'appearance') WM.open('appearance');
+      else if (act === 'taskbar') WM.open('appearance');
+      else if (act === 'account') openLogin();
+      else if (act === 'logout') doLogout();
+      else if (act === 'power') { closeStart(); shutdown(); }
+      else if (act === 'datetime') {
+        const d = new Date();
+        const s = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') +
+                  ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+        showMsgToast('当前日期和时间：' + s);
+      }
+    });
+  }
+  document.getElementById('loginReg').addEventListener('click', e => { e.preventDefault(); showRegPanel(); });
+  document.getElementById('regBack').addEventListener('click', e => { e.preventDefault(); showLoginPanel(); });
+  document.getElementById('regCancel').addEventListener('click', closeLogin);
+  document.getElementById('regSubmit').addEventListener('click', doRegister);
+
+  // 关机（经典 XP 关机体验）
+  const smShut = document.getElementById('smShut');
+  function shutdown() {
+    Object.values(WM.wins).forEach(w => w.el.classList.add('closed'));
+    if (loggedIn) doLogout();
+    const s = document.createElement('div');
+    s.className = 'shutdown-screen';
+    s.innerHTML = '<div class="sd-inner"><div class="sd-logo">⏻</div><div>Windows 正在关机…</div></div>';
+    document.body.appendChild(s);
+    requestAnimationFrame(() => s.classList.add('show'));
+    setTimeout(() => { s.innerHTML = '<div class="sd-safe">可以安全地关闭计算机了。</div>'; }, 2600);
+    s.addEventListener('click', () => {
+      s.classList.remove('show');
+      setTimeout(() => { s.remove(); WM.open('home'); }, 450);
+    });
+  }
+  if (smShut) smShut.addEventListener('click', e => { e.preventDefault(); closeStart(); shutdown(); });
+  loginOverlay.addEventListener('click', e => { if (e.target === loginOverlay) closeLogin(); });
+  loginUser.addEventListener('keydown', e => { if (e.key === 'Enter') loginPass.focus(); });
+  loginPass.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  regUser.addEventListener('keydown', e => { if (e.key === 'Enter') regPass.focus(); });
+  regPass.addEventListener('keydown', e => { if (e.key === 'Enter') regPass2.focus(); });
+  regPass2.addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
+
+  function send() {
+    if (!loggedIn) { openLogin(); return; }
+    const v = chatInput.value.trim();
+    if (!v) return;
+    const el = document.createElement('div');
+    el.className = 'msg';
+    el.innerHTML = '<b>' + esc(smUser.textContent || '你') + '</b>：' + esc(v);
+    mchat.appendChild(el); mchat.scrollTop = mchat.scrollHeight;
+    chatInput.value = '';
+  }
+  if (chatSend) chatSend.addEventListener('click', send);
+  if (chatInput) chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+  /* ---------- 论坛：真实后端（账户 / 话题 / 嵌套回复 / 点赞 / 管理员） ---------- */
+  const API_OK = location.protocol.indexOf('http') === 0;
+  const topicListView = document.getElementById('topicListView');
+  const topicDetailView = document.getElementById('topicDetailView');
+  const topicList = document.getElementById('topicList');
+  const annBar = document.getElementById('annBar');
+  const catFilter = document.getElementById('catFilter');
+  const adminBtn = document.getElementById('adminBtn');
+
+  let forumCache = null;
+  let currentTopicId = null;
+
+  async function api(method, path, data) {
+    if (!API_OK) throw new Error('no-server');
+    const opt = { method, headers: { 'Content-Type': 'application/json' } };
+    if (authToken) opt.headers.Authorization = 'Bearer ' + authToken;
+    if (data) opt.body = JSON.stringify(data);
+    const r = await fetch(path, opt);
+    let d = null; try { d = await r.json(); } catch (e) {}
+    if (!r.ok) { const err = new Error((d && d.error) || ('http ' + r.status)); err.status = r.status; throw err; }
+    return d;
+  }
+  function isAdmin() { return authRole === 'admin'; }
+
+  async function loadForum() {
+    topicDetailView.hidden = true;
+    topicListView.hidden = false;
+    topicList.innerHTML = '<div class="loading">加载中…</div>';
+    try {
+      const d = await api('GET', '/api/forum');
+      forumCache = d;
+      renderAnnouncements(d.announcements || []);
+      renderCatFilter(d.categories || []);
+      renderTopicList(d.topics || []);
+    } catch (e) {
+      topicList.innerHTML = '<div class="empty-hint">无法连接服务器，请确认 server.js 已启动。</div>';
+    }
+  }
+
+  function renderAnnouncements(list) {
+    if (!list.length) { annBar.hidden = true; annBar.innerHTML = ''; return; }
+    annBar.hidden = false; annBar.innerHTML = '';
+    list.forEach(a => {
+      const el = document.createElement('div'); el.className = 'ann-item';
+      el.innerHTML = '<span class="ann-ico">📢</span><div class="ann-text"><b>' + esc(a.title) + '</b>' +
+        (a.body ? ' — ' + esc(a.body) : '') +
+        '<div class="ann-meta">by ' + esc(a.author || '管理员') + ' · ' + fmtDate(a.createdAt) + '</div></div>';
+      annBar.appendChild(el);
+    });
+  }
+
+  function renderCatFilter(cats) {
+    const cur = catFilter.value;
+    catFilter.innerHTML = '<option value="">全部板块</option>';
+    cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; catFilter.appendChild(o); });
+    if (cats.indexOf(cur) >= 0) catFilter.value = cur;
+  }
+  catFilter.addEventListener('change', () => { if (forumCache) renderTopicList(forumCache.topics); });
+
+  function renderTopicList(topics) {
+    const cat = catFilter.value;
+    let list = topics;
+    if (cat) list = list.filter(t => t.category === cat);
+    if (!list.length) { topicList.innerHTML = '<div class="empty-hint">该板块还没有话题，来发第一个吧！</div>'; return; }
+    topicList.innerHTML = '';
+    list.forEach(t => topicList.appendChild(makeTopicItem(t)));
+  }
+
+  function makeTopicItem(t) {
+    const li = document.createElement('div'); li.className = 'topic-item';
+    if (t.pinned) li.classList.add('pinned');
+    if (t.hidden) li.classList.add('hidden-topic');
+    const left = document.createElement('div'); left.className = 'ti-left';
+    const tt = document.createElement('div'); tt.className = 'tt';
+    let badge = '';
+    if (t.pinned) badge += '<span class="badge pin">📌 置顶</span>';
+    if (t.hidden) badge += '<span class="badge hide">🙈 隐藏</span>';
+    tt.innerHTML = badge + esc(t.title);
+    const tm = document.createElement('div'); tm.className = 'tm';
+    tm.textContent = '板块：' + (t.category || '—') + ' · ' + (t.author || '匿名') + ' · ' + fmtDate(t.createdAt);
+    left.appendChild(tt); left.appendChild(tm);
+    li.appendChild(left);
+
+    const right = document.createElement('div'); right.className = 'ti-right';
+    const stats = document.createElement('div'); stats.className = 'ti-stats';
+    stats.innerHTML = '<span title="回复">💬 ' + (t.replyCount || 0) + '</span>';
+    right.appendChild(stats);
+
+    const likeBtn = document.createElement('button'); likeBtn.className = 'like-btn' + (t.likedByMe ? ' liked' : '');
+    likeBtn.textContent = (t.likedByMe ? '❤️ ' : '🤍 ') + (t.likeCount || 0);
+    likeBtn.addEventListener('click', e => { e.stopPropagation(); toggleTopicLike(t.id, likeBtn); });
+    right.appendChild(likeBtn);
+
+    if (isAdmin()) {
+      const ad = document.createElement('div'); ad.className = 'ti-admin';
+      const pin = document.createElement('button'); pin.className = 'mini-btn'; pin.textContent = t.pinned ? '取消置顶' : '置顶';
+      pin.addEventListener('click', e => { e.stopPropagation(); adminPin(t.id, !t.pinned); });
+      const hid = document.createElement('button'); hid.className = 'mini-btn'; hid.textContent = t.hidden ? '取消隐藏' : '隐藏';
+      hid.addEventListener('click', e => { e.stopPropagation(); adminHide(t.id, !t.hidden); });
+      ad.appendChild(pin); ad.appendChild(hid);
+      right.appendChild(ad);
+    }
+    li.appendChild(right);
+    li.addEventListener('click', () => openTopic(t.id));
+    return li;
+  }
+
+  async function toggleTopicLike(id, btn) {
+    if (!loggedIn) { openLogin(); return; }
+    try {
+      const d = await api('POST', '/api/topics/' + encodeURIComponent(id) + '/like');
+      btn.classList.toggle('liked', d.liked);
+      btn.textContent = (d.liked ? '❤️ ' : '🤍 ') + d.likes.length;
+    } catch (e) { showMsgToast('操作失败：' + e.message); }
+  }
+  async function adminPin(id, pinned) {
+    try { await api('POST', '/api/admin/topics/' + encodeURIComponent(id) + '/pin', { pinned }); loadForum(); }
+    catch (e) { showMsgToast('操作失败：' + e.message); }
+  }
+  async function adminHide(id, hidden) {
+    try { await api('POST', '/api/admin/topics/' + encodeURIComponent(id) + '/hide', { hidden }); loadForum(); }
+    catch (e) { showMsgToast('操作失败：' + e.message); }
+  }
+
+  async function openTopic(id) {
+    currentTopicId = id;
+    topicListView.hidden = true;
+    topicDetailView.hidden = false;
+    const body = document.getElementById('topicDetailBody');
+    body.innerHTML = '<div class="loading">加载中…</div>';
+    let t;
+    try { const d = await api('GET', '/api/topics/' + encodeURIComponent(id)); t = d.topic; }
+    catch (e) { body.innerHTML = '<div class="empty-hint">加载失败：' + esc(e.message) + '</div>'; return; }
+
+    body.innerHTML = '';
+    const head = document.createElement('div'); head.className = 'topic-head';
+    const h = document.createElement('h3'); h.className = 'dh'; h.textContent = t.title;
+    const meta = document.createElement('div'); meta.className = 'dmeta';
+    meta.textContent = '板块：' + (t.category || '—') + ' · 作者：' + (t.author || '匿名') + ' · ' + fmtDate(t.createdAt) +
+      (t.pinned ? ' · 📌 置顶' : '') + ((isAdmin() && t.hidden) ? ' · 🙈 隐藏' : '');
+    head.appendChild(h); head.appendChild(meta);
+
+    const likeBtn = document.createElement('button'); likeBtn.className = 'like-btn big' + (t.likedByMe ? ' liked' : '');
+    likeBtn.textContent = (t.likedByMe ? '❤️ ' : '🤍 ') + '赞 ' + ((t.likes || []).length);
+    likeBtn.addEventListener('click', () => {
+      if (!loggedIn) { openLogin(); return; }
+      api('POST', '/api/topics/' + encodeURIComponent(id) + '/like').then(d => {
+        likeBtn.classList.toggle('liked', d.liked);
+        likeBtn.textContent = (d.liked ? '❤️ ' : '🤍 ') + '赞 ' + d.likes.length;
+      }).catch(e => showMsgToast('操作失败：' + e.message));
+    });
+    head.appendChild(likeBtn);
+
+    if (isAdmin()) {
+      const ad = document.createElement('div'); ad.className = 'ti-admin';
+      const pin = document.createElement('button'); pin.className = 'mini-btn'; pin.textContent = t.pinned ? '取消置顶' : '置顶';
+      pin.addEventListener('click', () => adminPin(t.id, !t.pinned).then(() => openTopic(id)));
+      const hid = document.createElement('button'); hid.className = 'mini-btn'; hid.textContent = t.hidden ? '取消隐藏' : '隐藏';
+      hid.addEventListener('click', () => adminHide(t.id, !t.hidden).then(() => openTopic(id)));
+      ad.appendChild(pin); ad.appendChild(hid); head.appendChild(ad);
+    }
+    body.appendChild(head);
+
+    const first = document.createElement('div'); first.className = 'post topic-post';
+    first.innerHTML = '<b>' + esc(t.author || '匿名') + '</b><div class="pmeta">' + fmtDate(t.createdAt) + '</div><div class="pcontent">' + esc(t.body || '(无正文)') + '</div>';
+    body.appendChild(first);
+
+    const repliesWrap = document.createElement('div'); repliesWrap.className = 'replies';
+    body.appendChild(repliesWrap);
+    const me = currentUser();
+    function renderReplies(replies, depth) {
+      (replies || []).forEach(r => {
+        const el = document.createElement('div'); el.className = 'reply'; el.dataset.rid = r.id;
+        el.style.marginLeft = Math.min(depth, 6) * 18 + 'px';
+        const inner = document.createElement('div'); inner.className = 'reply-inner';
+        inner.innerHTML = '<div class="reply-head"><b>' + esc(r.author) + '</b><span class="pmeta">' + fmtDate(r.createdAt) + '</span></div>' +
+          '<div class="pcontent">' + esc(r.body || '') + '</div>';
+        const foot = document.createElement('div'); foot.className = 'reply-foot';
+        const rl = document.createElement('button'); rl.className = 'like-btn small' + ((r.likes || []).indexOf(me) >= 0 ? ' liked' : '');
+        rl.textContent = ((r.likes || []).indexOf(me) >= 0 ? '❤️ ' : '🤍 ') + (r.likes ? r.likes.length : 0);
+        rl.addEventListener('click', () => {
+          if (!loggedIn) { openLogin(); return; }
+          api('POST', '/api/replies/' + encodeURIComponent(r.id) + '/like').then(d => {
+            rl.classList.toggle('liked', d.liked);
+            rl.textContent = (d.liked ? '❤️ ' : '🤍 ') + d.likes.length;
+          }).catch(e => showMsgToast('操作失败：' + e.message));
+        });
+        const rep = document.createElement('button'); rep.className = 'mini-btn'; rep.textContent = '回复';
+        rep.addEventListener('click', () => openReplyBox(r.id, r.author));
+        foot.appendChild(rl); foot.appendChild(rep);
+        inner.appendChild(foot);
+        el.appendChild(inner);
+        repliesWrap.appendChild(el);
+        if (r.children && r.children.length) renderReplies(r.children, depth + 1);
+      });
+    }
+    renderReplies(t.replies, 0);
+
+    buildReplyArea(body, id, null, t.author);
+  }
+
+  function buildReplyArea(container, topicId, parentId, parentAuthor) {
+    const box = document.createElement('div'); box.className = 'reply-box root';
+    const ta = document.createElement('textarea');
+    ta.placeholder = loggedIn ? (parentId ? '回复 @' + (parentAuthor || '') + '…（Ctrl+Enter 发送）' : '写下你的回复…（Ctrl+Enter 发送）') : '请先登录后回复';
+    const btn = document.createElement('button'); btn.className = 'xp-btn small primary'; btn.textContent = '回复';
+    box.appendChild(ta); box.appendChild(btn);
+    container.appendChild(box);
+    async function send() {
+      if (!loggedIn) { openLogin(); return; }
+      const v = ta.value.trim(); if (!v) return;
+      btn.disabled = true;
+      try { await api('POST', '/api/topics/' + encodeURIComponent(topicId) + '/replies', { body: v, parentId: parentId || undefined }); openTopic(topicId); }
+      catch (e) { showMsgToast('回复失败：' + e.message); btn.disabled = false; }
+    }
+    btn.addEventListener('click', send);
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(); });
+  }
+
+  function openReplyBox(replyId, replyAuthor) {
+    const old = document.querySelector('.reply-box.target'); if (old) old.remove();
+    const target = document.querySelector('.reply[data-rid="' + replyId + '"]');
+    if (!target) return;
+    const box = document.createElement('div'); box.className = 'reply-box target';
+    const tag = document.createElement('div'); tag.className = 'reply-to'; tag.textContent = '↳ 正在回复 @' + (replyAuthor || '');
+    const ta = document.createElement('textarea'); ta.placeholder = loggedIn ? '回复 @' + (replyAuthor || '') + '…（Ctrl+Enter 发送）' : '请先登录后回复';
+    const btn = document.createElement('button'); btn.className = 'xp-btn small primary'; btn.textContent = '回复';
+    box.appendChild(tag); box.appendChild(ta); box.appendChild(btn);
+    target.appendChild(box);
+    ta.focus();
+    btn.addEventListener('click', async () => {
+      if (!loggedIn) { openLogin(); return; }
+      const v = ta.value.trim(); if (!v) return;
+      btn.disabled = true;
+      try { await api('POST', '/api/topics/' + encodeURIComponent(currentTopicId) + '/replies', { body: v, parentId: replyId }); openTopic(currentTopicId); }
+      catch (e) { showMsgToast('回复失败：' + e.message); btn.disabled = false; }
+    });
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) btn.click(); });
+  }
+
+  document.getElementById('topicBack').addEventListener('click', () => loadForum());
+
+  /* ---------- 发新话题模态 ---------- */
+  const topicOverlay = document.getElementById('topicOverlay');
+  const ntTitle = document.getElementById('ntTitle');
+  const ntCat = document.getElementById('ntCat');
+  const ntBody = document.getElementById('ntBody');
+  const topicSubmit = document.getElementById('topicSubmit');
+
+  function fillCatList() {
+    const dl = document.getElementById('catList'); if (!dl) return;
+    const cats = (forumCache && forumCache.categories) || [];
+    dl.innerHTML = '';
+    cats.forEach(c => { const o = document.createElement('option'); o.value = c; dl.appendChild(o); });
+  }
+  function openTopicModal() {
+    if (!loggedIn) { openLogin(); return; }
+    fillCatList();
+    topicOverlay.hidden = false; ntTitle.focus();
+  }
+  function closeTopicModal() { topicOverlay.hidden = true; }
+  document.getElementById('topicClose').addEventListener('click', closeTopicModal);
+  document.getElementById('topicCancel').addEventListener('click', closeTopicModal);
+  topicOverlay.addEventListener('click', e => { if (e.target === topicOverlay) closeTopicModal(); });
+  topicSubmit.addEventListener('click', () => {
+    const title = ntTitle.value.trim();
+    const body = ntBody.value.trim();
+    const cat = ntCat.value.trim();
+    if (!title) { ntTitle.focus(); return; }
+    topicSubmit.disabled = true;
+    api('POST', '/api/topics', { title, category: cat, body })
+      .then(d => { closeTopicModal(); ntTitle.value = ''; ntBody.value = ''; ntCat.value = ''; loadForum(); openTopic(d.topic.id); })
+      .catch(e => { showMsgToast('发布失败：' + e.message); topicSubmit.disabled = false; });
+  });
+  if (newTopicBtn) newTopicBtn.addEventListener('click', openTopicModal);
+
+  /* ---------- 管理后台 ---------- */
+  const adminGate = document.getElementById('adminGate');
+  const adminNoPerm = document.getElementById('adminNoPerm');
+  const adminUserList = document.getElementById('adminUserList');
+
+  const atabs = document.querySelectorAll('.atab');
+  atabs.forEach(t => t.addEventListener('click', () => {
+    atabs.forEach(x => x.classList.remove('active')); t.classList.add('active');
+    document.getElementById('adminUsersView').hidden = t.dataset.tab !== 'users';
+    document.getElementById('adminAnnView').hidden = t.dataset.tab !== 'ann';
+  }));
+
+  async function openAdmin() {
+    const ok = isAdmin();
+    if (adminGate) adminGate.hidden = !ok;
+    if (adminNoPerm) adminNoPerm.hidden = ok;
+    if (ok) loadAdminUsers();
+  }
+  async function loadAdminUsers() {
+    adminUserList.innerHTML = '<div class="loading">加载中…</div>';
+    try {
+      const d = await api('GET', '/api/admin/users');
+      adminUserList.innerHTML = '';
+      d.users.forEach(u => {
+        const row = document.createElement('div'); row.className = 'admin-user';
+        const info = document.createElement('div'); info.className = 'au-info';
+        info.innerHTML = '<b>' + esc(u.user) + '</b> <span class="badge ' + (u.role === 'admin' ? 'adm' : 'usr') + '">' + (u.role === 'admin' ? '管理员' : '用户') + '</span>';
+        const acts = document.createElement('div'); acts.className = 'au-acts';
+        const roleBtn = document.createElement('button'); roleBtn.className = 'mini-btn'; roleBtn.textContent = u.role === 'admin' ? '降为普通用户' : '设为管理员';
+        roleBtn.addEventListener('click', async () => {
+          try { await api('POST', '/api/admin/users/' + encodeURIComponent(u.user) + '/role', { role: u.role === 'admin' ? 'user' : 'admin' }); loadAdminUsers(); }
+          catch (e) { showMsgToast('操作失败：' + e.message); }
+        });
+        const delBtn = document.createElement('button'); delBtn.className = 'mini-btn danger'; delBtn.textContent = '删除';
+        delBtn.addEventListener('click', async () => {
+          if (!confirm('确定删除用户 “' + u.user + '” 吗？此操作不可恢复。')) return;
+          try { await api('POST', '/api/admin/users/' + encodeURIComponent(u.user) + '/delete'); loadAdminUsers(); if (forumCache) loadForum(); }
+          catch (e) { showMsgToast('操作失败：' + e.message); }
+        });
+        if (u.user === currentUser()) { delBtn.disabled = true; delBtn.title = '不能删除自己'; }
+        acts.appendChild(roleBtn); acts.appendChild(delBtn);
+        row.appendChild(info); row.appendChild(acts);
+        adminUserList.appendChild(row);
+      });
+    } catch (e) { adminUserList.innerHTML = '<div class="empty-hint">加载失败：' + esc(e.message) + '</div>'; }
+  }
+  const annSubmit = document.getElementById('annSubmit');
+  if (annSubmit) annSubmit.addEventListener('click', async () => {
+    const title = document.getElementById('annTitle').value.trim();
+    if (!title) { document.getElementById('annTitle').focus(); return; }
+    annSubmit.disabled = true;
+    try {
+      await api('POST', '/api/announcements', { title, body: document.getElementById('annBody').value.trim() });
+      document.getElementById('annTitle').value = ''; document.getElementById('annBody').value = '';
+      showMsgToast('公告已发布'); if (forumCache) loadForum();
+    } catch (e) { showMsgToast('发布失败：' + e.message); }
+    finally { annSubmit.disabled = false; }
+  });
+
+  // 打开论坛 / 管理后台窗口时自动加载
+  const _open = WM.open.bind(WM);
+  WM.open = function (id) { _open(id); if (id === 'topics') loadForum(); else if (id === 'admin') openAdmin(); };
+
+  /* ---------- 外观和个性化（壁纸 + 窗口颜色） ---------- */
+  const WALLPAPERS = [
+    // 经典 XP 主题壁纸
+    { id: 'azul',    name: 'Azul 海洋',     value: "url('assets/wallpapers/Azul.jpg') center/cover no-repeat #1a3a6a" },
+    { id: 'ascent',  name: 'Ascent 山月',   value: "url('assets/wallpapers/Ascent.jpg') center/cover no-repeat #2a3a5a" },
+    { id: 'autumn',  name: 'Autumn 枫径',   value: "url('assets/wallpapers/Autumn.jpg') center/cover no-repeat #6a3a12" },
+    { id: 'bliss',   name: 'Bliss 经典',    value: "url('assets/wallpapers/Bliss.jpg') center/cover no-repeat #4a7a3a" },
+    { id: 'crystal', name: 'Crystal 水晶',  value: "url('assets/wallpapers/Crystal.jpg') center/cover no-repeat #1a4a6a" },
+    { id: 'follow',  name: 'Follow 跟随',   value: "url('assets/wallpapers/Follow.jpg') center/cover no-repeat #3a3a3a" },
+    { id: 'friend',  name: 'Friend 友谊',   value: "url('assets/wallpapers/Friend.jpg') center/cover no-repeat #2a3a4a" },
+    { id: 'home',    name: 'Home 红墙',     value: "url('assets/wallpapers/Home.jpg') center/cover no-repeat #6a3a3a" },
+    { id: 'moonflower', name: 'Moon Flower 月光花', value: "url('assets/wallpapers/MoonFlower.jpg') center/cover no-repeat #1a1a2a" },
+    { id: 'peace',   name: 'Peace 静谧',    value: "url('assets/wallpapers/Peace.jpg') center/cover no-repeat #2a4a5a" },
+    { id: 'power',   name: 'Power 力量',    value: "url('assets/wallpapers/Power.jpg') center/cover no-repeat #1a2a3a" },
+    { id: 'purpleflower', name: 'Purple Flower 紫花', value: "url('assets/wallpapers/PurpleFlower.jpg') center/cover no-repeat #3a1a4a" },
+    { id: 'radiance', name: 'Radiance 光辉', value: "url('assets/wallpapers/Radiance.jpg') center/cover no-repeat #1a3a5a" },
+    { id: 'redmoondesert', name: 'Red Moon Desert 红月沙漠', value: "url('assets/wallpapers/RedMoonDesert.jpg') center/cover no-repeat #5a1a1a" },
+    { id: 'ripple',  name: 'Ripple 涟漪',   value: "url('assets/wallpapers/Ripple.jpg') center/cover no-repeat #2a3a4a" },
+    { id: 'stonehenge', name: 'Stonehenge 巨石阵', value: "url('assets/wallpapers/Stonehenge.jpg') center/cover no-repeat #3a3a4a" },
+    { id: 'tulips',  name: 'Tulips 郁金香', value: "url('assets/wallpapers/Tulips.jpg') center/cover no-repeat #3a4a2a" },
+    { id: 'vortecspace', name: 'Vortec Space 太空漩涡', value: "url('assets/wallpapers/VortecSpace.jpg') center/cover no-repeat #1a1a3a" },
+    { id: 'wind',    name: 'Wind 风行',     value: "url('assets/wallpapers/Wind.jpg') center/cover no-repeat #2a4a3a" },
+    // XP 各版本主题预览图
+    { id: 'xphome',  name: 'XP Home 版',    value: "url('assets/wallpapers/XpHome.jpg') center/cover no-repeat #3a6a2a" },
+    { id: 'xppro',   name: 'XP Pro 版',     value: "url('assets/wallpapers/XpPro.jpg') center/cover no-repeat #1a3a6a" },
+    { id: 'xp64',    name: 'XP 64-Bit 版',  value: "url('assets/wallpapers/Xp64Bit.jpg') center/cover no-repeat #1a3a5a" },
+    { id: 'xpprof',  name: 'XP ProFr 法语', value: "url('assets/wallpapers/XpProFr.jpg') center/cover no-repeat #1a3a6a" },
+    { id: 'xpfamfr', name: 'XP FamFr 法语', value: "url('assets/wallpapers/XpFrFamiliale.jpg') center/cover no-repeat #3a6a2a" },
+    // Embedded 2009 / POSReady
+    { id: 'posready',     name: 'POSReady 蓝标',     value: "url('assets/wallpapers/POSReady.jpg') center/cover no-repeat #1062b8" },
+    { id: 'posready-lg',  name: 'POSReady 品牌 LOGO', value: "url('assets/wallpapers/POSReady_Lg.jpg') center/cover no-repeat #1062b8" },
+    { id: 'posready-sm',  name: 'POSReady 简约 LOGO', value: "url('assets/wallpapers/POSReady_Sm.jpg') center/cover no-repeat #1472c8" },
+    // Media Center Edition & Plus! XP 系列
+    { id: 'energy-bliss', name: 'Energy Bliss 能量',  value: "url('assets/wallpapers/Energy Bliss.jpg') center/cover no-repeat #4a7a3a" },
+    { id: 'ocean',        name: 'Ocean 海洋之光',     value: "url('assets/wallpapers/Ocean.jpg') center/cover no-repeat #0e3a8a" },
+    { id: 'space',        name: 'Space 蓝色地球',     value: "url('assets/wallpapers/Space.jpg') center/cover no-repeat #050a20" },
+    { id: 'spring',       name: 'Spring 春芽',         value: "url('assets/wallpapers/Spring.jpg') center/cover no-repeat #2a5a2a" },
+    { id: 'star-tracks',  name: 'Star Tracks 星轨',    value: "url('assets/wallpapers/StarTracks.jpg') center/cover no-repeat #0a1a3a" },
+    { id: 'stream',       name: 'Stream 流瀑',         value: "url('assets/wallpapers/Stream.jpg') center/cover no-repeat #2a4a7a" },
+    { id: 'aquarium',     name: 'Aquarium 水族馆',     value: "url('assets/wallpapers/Aquarium.jpg') center/cover no-repeat #1a6a7a" },
+    { id: 'davinci',      name: 'Da Vinci 达芬奇手稿', value: "url('assets/wallpapers/DaVinci.jpg') center/cover no-repeat #5a3010" },
+    { id: 'freestyle',    name: 'Freestyle 自由风',     value: "url('assets/wallpapers/Windows XP Freestyle.jpg') center/cover no-repeat #2050a0" },
+    { id: 'media-center', name: 'Media Center 媒体中心版', value: "url('assets/wallpapers/Windows XP Media Center Edition.jpg') center/cover no-repeat #2050a0" },
+    // 纯色
+    { id: 'luna',    name: 'Luna 纯蓝',    value: "linear-gradient(160deg,#2a6fd6,#0a3f8f)" },
+    { id: 'royale',  name: 'Royale 紫',    value: "linear-gradient(160deg,#6a3aa0,#2a1a5a)" },
+    { id: 'olive',   name: 'Olive 绿',     value: "linear-gradient(160deg,#7a9a3a,#3a5a1a)" },
+    { id: 'rose',    name: 'Rose 红',      value: "linear-gradient(160deg,#d6607a,#8a1a3a)" }
+  ];
+  const ACCENTS = [
+    { id: 'blue',     name: '默认蓝',       c1: '#3c7fb1', c2: '#245edb' },
+    { id: 'green',    name: '橄榄绿',       c1: '#5b9b4a', c2: '#2f7a2f' },
+    { id: 'purple',   name: '高贵紫',       c1: '#7b5bbf', c2: '#4a2a9a' },
+    { id: 'red',      name: '玫瑰红',       c1: '#d6607a', c2: '#a01a3a' },
+    { id: 'orange',   name: '日落橙',       c1: '#e08a3a', c2: '#c14a1a' },
+    { id: 'teal',     name: '青绿',         c1: '#3aa8a0', c2: '#1a7a72' },
+    { id: 'posblue',  name: 'POS 深蓝',     c1: '#1062b8', c2: '#062e6a' },
+    { id: 'mce',      name: 'MCE 深海蓝',   c1: '#08306a', c2: '#04163a' },
+    { id: 'sepia',    name: '达芬奇棕',     c1: '#a0622a', c2: '#6a3e14' },
+    { id: 'midnight', name: '午夜蓝',       c1: '#1a2a5a', c2: '#0a1a4a' },
+    { id: 'aquarium', name: '水族馆蓝',     c1: '#3aa8d0', c2: '#1a6a8a' },
+    { id: 'classic',  name: 'Windows 经典', c1: '#d4d0c8', c2: '#b8b4a4' }
+  ];
+  // 一键主题（点一下同时应用：壁纸 + 标题栏/任务栏色 + 字体大小）
+  // 命名严格对齐 Windows XP 真实预制主题：亮蓝色 / Windows 经典 / Plus! 系列
+  const THEMES = [
+    { id: 'xp',             name: '亮蓝色（XP 默认）', wp: 'energy-bliss', accent: 'blue',     fs: 'md', desc: 'Windows XP 出厂默认' },
+    { id: 'plus-nature',    name: 'Plus! 自然',        wp: 'spring',       accent: 'green',    fs: 'md', desc: 'Plus! 自然之声' },
+    { id: 'plus-davinci',   name: 'Plus! 达芬奇',      wp: 'davinci',      accent: 'sepia',    fs: 'md', desc: 'Plus! 达芬奇手稿' },
+    { id: 'plus-space',     name: 'Plus! 太空',        wp: 'space',        accent: 'mce',      fs: 'md', desc: 'Plus! 太空遨游' },
+    { id: 'plus-aquarium',  name: 'Plus! 水族馆',      wp: 'aquarium',     accent: 'aquarium', fs: 'md', desc: 'Plus! 水族馆' },
+    { id: 'plus-freestyle', name: 'Plus! Freestyle',   wp: 'freestyle',    accent: 'midnight', fs: 'md', desc: 'MCE 2005 自由风' },
+    { id: 'classic',        name: 'Windows 经典',      wp: 'luna',         accent: 'classic',  fs: 'md', desc: 'Windows 9x 风格灰色' }
+  ];
+
+  function applyWallpaper(wp) {
+    desktop.style.background = wp.value;
+    try { localStorage.setItem('lunahub_wp', wp.id); } catch (e) {}
+    document.querySelectorAll('#wpGrid .wp').forEach(el => el.classList.toggle('sel', el.dataset.id === wp.id));
+    document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
+  }
+  function applyAccent(a) {
+    document.documentElement.style.setProperty('--acc1', a.c1);
+    document.documentElement.style.setProperty('--acc2', a.c2);
+    try { localStorage.setItem('lunahub_accent', a.id); } catch (e) {}
+    document.querySelectorAll('#accentGrid .accent').forEach(el => el.classList.toggle('sel', el.dataset.id === a.id));
+    document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
+  }
+  function applyFontSize(fs) {
+    document.body.setAttribute('data-fs', fs);
+    try { localStorage.setItem('lunahub_fs', fs); } catch (e) {}
+    document.querySelectorAll('#fsRow .fs-btn').forEach(el => el.classList.toggle('sel', el.dataset.fs === fs));
+    document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
+  }
+  function applyTheme(t) {
+    const wp = WALLPAPERS.find(w => w.id === t.wp);
+    const ac = ACCENTS.find(a => a.id === t.accent);
+    if (wp) applyWallpaper(wp);
+    if (ac) applyAccent(ac);
+    if (t.fs) applyFontSize(t.fs);
+    try { localStorage.setItem('lunahub_theme', t.id); } catch (e) {}
+    // 经典主题特殊：扁平灰色 + 纯蓝背景
+    if (t.id === 'classic') document.body.classList.add('theme-classic');
+    else document.body.classList.remove('theme-classic');
+    document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.toggle('sel', el.dataset.theme === t.id));
+  }
+
+  const wpGrid = document.getElementById('wpGrid');
+  WALLPAPERS.forEach(wp => {
+    const el = document.createElement('div');
+    el.className = 'wp'; el.dataset.id = wp.id;
+    el.style.background = wp.value;
+    el.innerHTML = '<span>' + wp.name + '</span>';
+    el.addEventListener('click', () => applyWallpaper(wp));
+    wpGrid.appendChild(el);
+  });
+  const accentGrid = document.getElementById('accentGrid');
+  ACCENTS.forEach(a => {
+    const el = document.createElement('div');
+    el.className = 'accent'; el.dataset.id = a.id; el.title = a.name;
+    el.style.background = 'linear-gradient(180deg,' + a.c1 + ',' + a.c2 + ')';
+    el.addEventListener('click', () => applyAccent(a));
+    accentGrid.appendChild(el);
+  });
+  // 主题预设卡片
+  const themeGrid = document.getElementById('themeGrid');
+  THEMES.forEach(t => {
+    const wp = WALLPAPERS.find(w => w.id === t.wp);
+    const ac = ACCENTS.find(a => a.id === t.accent);
+    const el = document.createElement('div');
+    el.className = 'theme-card'; el.dataset.theme = t.id; el.title = t.name + '（一键应用）';
+    el.innerHTML =
+      '<div class="theme-preview" style="background:' + (wp ? wp.value : '#ccc') + ';' +
+        '--tp-acc:linear-gradient(180deg,' + (ac ? ac.c1 : '#3c7fb1') + ',' + (ac ? ac.c2 : '#245edb') + ')">' +
+        '<div class="tp-win"><span class="tp-title"></span></div></div>' +
+      '<div class="theme-meta"><span class="ti">' + t.name + '</span>' +
+      '<span class="ts">' + ({sm:'小',md:'中',lg:'大',xl:'超大'})[t.fs] + '</span></div>' +
+      '<div class="theme-desc">' + (t.desc || '') + '</div>';
+    el.addEventListener('click', () => applyTheme(t));
+    themeGrid.appendChild(el);
+  });
+  // 字体按钮
+  document.querySelectorAll('#fsRow .fs-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyFontSize(btn.dataset.fs));
+  });
+
+  // 恢复上次的偏好（主题优先 > 分项 > 默认）
+  let savedWp = null, savedAc = null, savedFs = null, savedTheme = null;
+  try {
+    savedWp = localStorage.getItem('lunahub_wp');
+    savedAc = localStorage.getItem('lunahub_accent');
+    savedFs = localStorage.getItem('lunahub_fs');
+    savedTheme = localStorage.getItem('lunahub_theme');
+  } catch (e) {}
+  applyWallpaper(WALLPAPERS.find(w => w.id === savedWp) || WALLPAPERS[0]);
+  applyAccent(ACCENTS.find(a => a.id === savedAc) || ACCENTS[0]);
+  applyFontSize(savedFs || 'md');
+  if (savedTheme) {
+    const t = THEMES.find(x => x.id === savedTheme);
+    if (t) {
+      // 选中状态高亮 + 恢复主题 class（如经典主题）
+      const el = themeGrid.querySelector('[data-theme="' + t.id + '"]');
+      if (el) el.classList.add('sel');
+      if (t.id === 'classic') document.body.classList.add('theme-classic');
+    }
+  }
+
+  /* ---------- 桌面右键菜单 ---------- */
+  const ctxMenu = document.getElementById('ctxMenu');
+  let ctxSubTimer = null;
+
+  function showCtx(x, y) {
+    closeAllSubs();
+    ctxMenu.hidden = false;
+    const mw = ctxMenu.offsetWidth, mh = ctxMenu.offsetHeight;
+    let X = Math.min(x, window.innerWidth - mw - 4);
+    let Y = Math.min(y, window.innerHeight - mh - 4);
+    if (X < 0) X = 0;
+    if (Y < 0) Y = 0;
+    ctxMenu.style.left = X + 'px';
+    ctxMenu.style.top = Y + 'px';
+  }
+  function hideCtx() { ctxMenu.hidden = true; closeAllSubs(); }
+  function closeAllSubs() {
+    ctxMenu.querySelectorAll('.ctx-sub').forEach(s => s.hidden = true);
+    ctxMenu.querySelectorAll('.ci.has-sub').forEach(c => c.classList.remove('open'));
+  }
+  function openSub(parentCi) {
+    closeAllSubs();
+    parentCi.classList.add('open');
+    const sub = parentCi.querySelector('.ctx-sub');
+    if (sub) {
+      sub.hidden = false;
+      // 防止子菜单超出右边界：如果右边放不下就放左边
+      const r = parentCi.getBoundingClientRect();
+      const sw = sub.offsetWidth;
+      if (r.right + sw > window.innerWidth - 4) {
+        sub.style.left = 'auto';
+        sub.style.right = '100%';
+      } else {
+        sub.style.left = '100%';
+        sub.style.right = 'auto';
+      }
+    }
+  }
+
+  // 桌面空白处右键
+  desktop.addEventListener('contextmenu', e => {
+    if (e.target.closest('.window') || e.target.closest('.taskbar') || e.target.closest('.startmenu') || e.target.closest('.ctx-menu') || e.target.closest('.dico')) return;
+    e.preventDefault();
+    showCtx(e.clientX, e.clientY);
+  });
+
+  // 点其他处关闭
+  document.addEventListener('click', e => { if (!ctxMenu.hidden && !e.target.closest('.ctx-menu')) hideCtx(); });
+  document.addEventListener('contextmenu', e => { if (!ctxMenu.hidden && !e.target.closest('.ctx-menu')) hideCtx(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !ctxMenu.hidden) hideCtx(); });
+
+  // has-sub 悬停展开子菜单
+  ctxMenu.querySelectorAll('.ci.has-sub').forEach(ci => {
+    ci.addEventListener('mouseenter', () => {
+      clearTimeout(ctxSubTimer);
+      ctxSubTimer = setTimeout(() => openSub(ci), 250);
+    });
+    ci.addEventListener('mouseleave', () => {
+      clearTimeout(ctxSubTimer);
+      // 延迟关闭，允许鼠标移入子菜单
+      ctxSubTimer = setTimeout(() => {
+        if (!ci.querySelector('.ctx-sub:hover')) closeAllSubs();
+      }, 300);
+    });
+  });
+
+  // 子菜单项点击
+  ctxMenu.querySelectorAll('.ctx-sub .ci').forEach(ci => {
+    ci.addEventListener('click', e => {
+      e.stopPropagation();
+      const sub = ci.dataset.sub;
+      if (sub === 'arr-name' || sub === 'arr-size' || sub === 'arr-type' || sub === 'arr-date') {
+        // 排列桌面图标（演示）
+        const icons = [...deskIcons.querySelectorAll('.dico')];
+        const key = { 'arr-name': 1, 'arr-size': 2, 'arr-type': 3, 'arr-date': 0 }[sub];
+        icons.sort((a, b) => {
+          const ta = a.querySelector('.di-txt').textContent, tb = b.querySelector('.di-txt').textContent;
+          return key === 0 ? 0 : ta.localeCompare(tb, 'zh');
+        });
+        icons.forEach(ic => deskIcons.appendChild(ic));
+      }
+      else if (sub === 'arr-auto' || sub === 'arr-grid') {
+        ci.classList.toggle('checked');
+        const ic = ci.querySelector('.ic');
+        ic.textContent = ci.classList.contains('checked') ? '✓' : '';
+      }
+      else if (sub === 'new-txt') {
+        spawnNotepad('新建文本文档');
+      }
+      hideCtx();
+    });
+  });
+
+  // 主菜单项点击
+  ctxMenu.querySelectorAll('.ci[data-act]').forEach(ci => {
+    if (ci.classList.contains('has-sub')) return; // 子菜单项单独处理
+    ci.addEventListener('click', e => {
+      if (ci.classList.contains('disabled')) return;
+      const act = ci.dataset.act;
+      if (act === 'refresh') {
+        if (!topicListView.hidden) loadForum();
+        if (desktop.animate) desktop.animate([{ filter: 'brightness(1.35)' }, { filter: 'brightness(1)' }], { duration: 260 });
+      }
+      else if (act === 'personalize') { WM.open('appearance'); }
+      else if (act === 'properties') { WM.open('about'); }
+      hideCtx();
+    });
+  });
+
+  function spawnNotepad(name) {
+    const id = 'np' + Date.now();
+    const sec = document.createElement('section');
+    sec.className = 'window'; sec.id = id; sec.style.width = '360px';
+    sec.innerHTML = '<div class="titlebar"><span class="ico">📝</span><span class="title">' + (name || '无标题') + ' - 记事本</span>' +
+      '<span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span></div>' +
+      '<div class="menubar"><span>文件</span><span>编辑</span><span>格式</span><span>查看</span><span>帮助</span></div>' +
+      '<div class="winbody" style="padding:0"><textarea class="notepad-area" placeholder="在这里输入…（演示）"></textarea></div>';
+    desktop.appendChild(sec);
+    WM.register(id);
+    WM.open(id);
+    // 在桌面生成一个文件图标，双击可重新打开（XP 行为）
+    const di = document.createElement('button');
+    di.className = 'dico';
+    di.dataset.app = id;
+    di.innerHTML = '<span class="di-ico">📄</span><span class="di-txt">' + (name || '新建文本文档') + '</span>';
+    deskIcons.appendChild(di);
+    di.addEventListener('click', () => { document.querySelectorAll('.dico').forEach(x => x.classList.remove('sel')); di.classList.add('sel'); });
+    di.addEventListener('dblclick', () => WM.open(id));
+  }
+
+  /* ---------- 工具函数 ---------- */
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  }
+  function fmtDate(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const p = n => ('' + (n < 10 ? '0' : '') + n);
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  /* ---------- 时钟 ---------- */
+  const clock = document.getElementById('clock');
+  function tick() {
+    const d = new Date();
+    const p = n => (n < 10 ? '0' : '') + n;
+    clock.textContent = p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  tick(); setInterval(tick, 1000 * 30);
+
+  /* ---------- 启动 ---------- */
+  try {
+    const u = localStorage.getItem(SAVE_KEY);
+    const tk = localStorage.getItem(TOKEN_KEY);
+    const rl = localStorage.getItem(ROLE_KEY);
+    if (u && tk) { loggedIn = true; authToken = tk; authRole = rl; setUserUI(u); }
+  } catch (e) {}
+  updateAuthUI();
+  // 校验 token 是否仍然有效，并刷新角色
+  if (authToken) {
+    api('GET', '/api/me').then(d => { authRole = d.role; updateAuthUI(); })
+      .catch(() => { /* token 失效，下次操作会提示登录 */ });
+  }
+  WM.open('home');
+
+})();
