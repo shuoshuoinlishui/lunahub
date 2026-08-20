@@ -21,6 +21,8 @@
     mines:   { icon: '💣', title: '扫雷' },
     music:   { icon: '🎵', title: 'Luna媒体播放器' },
     photos:  { icon: '📷', title: 'Luna照片查看器' },
+    paint:   { icon: '🎨', title: 'Luna画图' },
+    pointer: { icon: '🖍️', title: '电子教鞭' },
     appearance: { icon: '🎨', title: '外观和个性化' },
     control:    { icon: '🛠️', title: '控制面板' },
     account:    { icon: '👤', title: '用户账户' },
@@ -2255,9 +2257,322 @@
     new ResizeObserver(() => { if (phFitMode && phImg.src) { phZoom = phFitCalc(); phApply(); } }).observe(phStage);
   }
 
+  /* ---------- Luna画图 ---------- */
+  const ptCanvas = document.getElementById('ptCanvas');
+  const ptCtx = ptCanvas && ptCanvas.getContext ? ptCanvas.getContext('2d') : null;
+  const ptCurFg = document.getElementById('ptCurFg');
+  const ptPos = document.getElementById('ptPos');
+  let ptTool = 'pencil', ptSize = 2, ptColor = '#000000';
+  let ptUndoStack = [];
+  let ptDrawing = false, ptSX = 0, ptSY = 0, ptSnapshot = null;
+
+  if (ptCtx) {
+    ptCtx.fillStyle = '#ffffff';
+    ptCtx.fillRect(0, 0, ptCanvas.width, ptCanvas.height);
+    ptCtx.lineCap = 'round';
+    ptCtx.lineJoin = 'round';
+  }
+
+  function ptPushUndo() {
+    if (!ptCtx) return;
+    try {
+      ptUndoStack.push(ptCtx.getImageData(0, 0, ptCanvas.width, ptCanvas.height));
+      if (ptUndoStack.length > 25) ptUndoStack.shift();
+    } catch (e) {}
+  }
+
+  function ptPosOnCanvas(e) {
+    const r = ptCanvas.getBoundingClientRect();
+    const sx = ptCanvas.width / (r.width || 1), sy = ptCanvas.height / (r.height || 1);
+    return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+  }
+
+  function ptFloodFill(sx, sy, hex) {
+    const W = ptCanvas.width, H = ptCanvas.height;
+    sx = Math.floor(sx); sy = Math.floor(sy);
+    if (sx < 0 || sy < 0 || sx >= W || sy >= H) return;
+    const img = ptCtx.getImageData(0, 0, W, H), d = img.data;
+    const idx = (x, y) => (y * W + x) * 4;
+    const t = idx(sx, sy);
+    const tr = d[t], tg = d[t + 1], tb = d[t + 2], ta = d[t + 3];
+    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    if (tr === r && tg === g && tb === b && ta === 255) return;
+    const stack = [[sx, sy]];
+    while (stack.length) {
+      const [x, y] = stack.pop();
+      let xx = x;
+      while (xx >= 0 && idx(xx, y) >= 0) {
+        const i = idx(xx, y);
+        if (d[i] !== tr || d[i + 1] !== tg || d[i + 2] !== tb || d[i + 3] !== ta) break;
+        xx--;
+      }
+      xx++;
+      let spanUp = false, spanDown = false;
+      while (xx < W) {
+        const i = idx(xx, y);
+        if (d[i] !== tr || d[i + 1] !== tg || d[i + 2] !== tb || d[i + 3] !== ta) break;
+        d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
+        if (y > 0) {
+          const u = idx(xx, y - 1);
+          const up = d[u] === tr && d[u + 1] === tg && d[u + 2] === tb && d[u + 3] === ta;
+          if (up && !spanUp) { stack.push([xx, y - 1]); spanUp = true; }
+          else if (!up) spanUp = false;
+        }
+        if (y < H - 1) {
+          const dn = idx(xx, y + 1);
+          const dw = d[dn] === tr && d[dn + 1] === tg && d[dn + 2] === tb && d[dn + 3] === ta;
+          if (dw && !spanDown) { stack.push([xx, y + 1]); spanDown = true; }
+          else if (!dw) spanDown = false;
+        }
+        xx++;
+      }
+    }
+    ptCtx.putImageData(img, 0, 0);
+  }
+
+  if (ptCtx) {
+    ptCanvas.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      const p = ptPosOnCanvas(e);
+      if (ptTool === 'fill') { ptPushUndo(); ptFloodFill(p.x, p.y, ptColor); return; }
+      ptPushUndo();
+      ptDrawing = true;
+      ptSX = p.x; ptSY = p.y;
+      try { ptCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+      if (ptTool === 'pencil' || ptTool === 'brush' || ptTool === 'eraser') {
+        ptCtx.strokeStyle = ptTool === 'eraser' ? '#ffffff' : ptColor;
+        ptCtx.lineWidth = ptTool === 'pencil' ? 1 : ptSize;
+        if (ptTool === 'eraser') ptCtx.lineWidth = Math.max(ptSize, 8);
+        ptCtx.beginPath();
+        ptCtx.moveTo(p.x, p.y);
+        ptCtx.lineTo(p.x + 0.01, p.y + 0.01);
+        ptCtx.stroke();
+      } else {
+        try { ptSnapshot = ptCtx.getImageData(0, 0, ptCanvas.width, ptCanvas.height); } catch (err) { ptSnapshot = null; }
+      }
+    });
+    ptCanvas.addEventListener('pointermove', e => {
+      const p = ptPosOnCanvas(e);
+      ptPos.textContent = Math.round(p.x) + ', ' + Math.round(p.y);
+      if (!ptDrawing) return;
+      if (ptTool === 'pencil' || ptTool === 'brush' || ptTool === 'eraser') {
+        ptCtx.lineTo(p.x, p.y);
+        ptCtx.stroke();
+      } else {
+        if (ptSnapshot) ptCtx.putImageData(ptSnapshot, 0, 0);
+        ptCtx.strokeStyle = ptColor;
+        ptCtx.lineWidth = ptSize;
+        ptCtx.beginPath();
+        if (ptTool === 'line') { ptCtx.moveTo(ptSX, ptSY); ptCtx.lineTo(p.x, p.y); }
+        else if (ptTool === 'rect') { ptCtx.rect(Math.min(ptSX, p.x), Math.min(ptSY, p.y), Math.abs(p.x - ptSX), Math.abs(p.y - ptSY)); }
+        else if (ptTool === 'ellipse') {
+          const cx = (ptSX + p.x) / 2, cy = (ptSY + p.y) / 2;
+          ptCtx.ellipse(cx, cy, Math.abs(p.x - ptSX) / 2, Math.abs(p.y - ptSY) / 2, 0, 0, Math.PI * 2);
+        }
+        ptCtx.stroke();
+      }
+    });
+    const ptEnd = e => {
+      if (!ptDrawing) return;
+      ptDrawing = false;
+      ptSnapshot = null;
+      try { ptCanvas.releasePointerCapture(e.pointerId); } catch (err) {}
+    };
+    ptCanvas.addEventListener('pointerup', ptEnd);
+    ptCanvas.addEventListener('pointercancel', ptEnd);
+  }
+
+  // 工具切换
+  document.querySelectorAll('#paint .pt-tool[data-tool]').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#paint .pt-tool[data-tool]').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      ptTool = b.dataset.tool;
+    });
+  });
+  // 笔刷粗细
+  document.querySelectorAll('#paint .pt-size').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#paint .pt-size').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      ptSize = parseInt(b.dataset.size, 10) || 2;
+    });
+  });
+  // 调色板（XP 画图 28 色）
+  (function () {
+    const pal = document.getElementById('ptPalette');
+    if (!pal) return;
+    const colors = [
+      '#000000', '#808080', '#800000', '#808000', '#008000', '#008080', '#000080', '#800080',
+      '#808040', '#004040', '#0080ff', '#004080', '#8000ff', '#804000',
+      '#ffffff', '#c0c0c0', '#ff0000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff',
+      '#ffff80', '#00ff80', '#80ffff', '#8080ff', '#ff0080', '#ff8040'
+    ];
+    colors.forEach(c => {
+      const s = document.createElement('button');
+      s.className = 'pt-swatch';
+      s.type = 'button';
+      s.style.background = c;
+      s.title = c;
+      s.addEventListener('click', () => {
+        ptColor = c;
+        if (ptCurFg) ptCurFg.style.background = c;
+      });
+      pal.appendChild(s);
+    });
+  })();
+  // 新建 / 撤销 / 保存
+  document.getElementById('ptNew').addEventListener('click', () => {
+    if (!ptCtx) return;
+    if (!confirm('清空画布并重新开始吗？')) return;
+    ptPushUndo();
+    ptCtx.fillStyle = '#ffffff';
+    ptCtx.fillRect(0, 0, ptCanvas.width, ptCanvas.height);
+  });
+  document.getElementById('ptUndo').addEventListener('click', () => {
+    if (!ptCtx || !ptUndoStack.length) return;
+    ptCtx.putImageData(ptUndoStack.pop(), 0, 0);
+  });
+  document.getElementById('ptSave').addEventListener('click', () => {
+    if (!ptCtx) return;
+    try {
+      const a = document.createElement('a');
+      a.href = ptCanvas.toDataURL('image/png');
+      a.download = 'Luna画图-' + new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-') + '.png';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      showMsgToast('已保存为 PNG 图片');
+    } catch (e) { showMsgToast('保存失败：' + e.message); }
+  });
+  // Ctrl+Z 撤销（画图窗口打开时）
+  document.addEventListener('keydown', e => {
+    if (e.key === 'z' && (e.ctrlKey || e.metaKey) && ptCanvas && !document.getElementById('paint').classList.contains('closed')) {
+      e.preventDefault();
+      document.getElementById('ptUndo').click();
+    }
+  });
+
+  /* ---------- 电子教鞭（全屏批注） ---------- */
+  const ptrOverlay = document.getElementById('ptrOverlay');
+  const ptrCanvas = document.getElementById('ptrCanvas');
+  const ptrToolbar = document.getElementById('ptrToolbar');
+  const ptrCtx = ptrCanvas && ptrCanvas.getContext ? ptrCanvas.getContext('2d') : null;
+  let ptrTool = 'pen', ptrColor2 = '#ff2d2d', ptrActive = false;
+  let ptrDrawing = false, ptrLast = null;
+
+  function ptrResize(keep) {
+    if (!ptrCtx) return;
+    const w = window.innerWidth || document.documentElement.clientWidth || 1280;
+    const h = window.innerHeight || document.documentElement.clientHeight || 720;
+    let old = null;
+    if (keep && ptrCanvas.width && ptrCanvas.height) {
+      try { old = document.createElement('canvas'); old.width = ptrCanvas.width; old.height = ptrCanvas.height; old.getContext('2d').drawImage(ptrCanvas, 0, 0); } catch (e) { old = null; }
+    }
+    ptrCanvas.width = w; ptrCanvas.height = h;
+    ptrCtx.lineCap = 'round';
+    ptrCtx.lineJoin = 'round';
+    if (old) ptrCtx.drawImage(old, 0, 0);
+  }
+
+  function ptrOpen() {
+    ptrActive = true;
+    ptrOverlay.hidden = false;
+    ptrResize(false);
+  }
+  function ptrClose() {
+    ptrActive = false;
+    ptrOverlay.hidden = true;
+    ptrDrawing = false;
+  }
+
+  if (ptrCtx) {
+    ptrCanvas.addEventListener('pointerdown', e => {
+      ptrDrawing = true;
+      ptrLast = { x: e.clientX, y: e.clientY };
+      try { ptrCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    ptrCanvas.addEventListener('pointermove', e => {
+      if (!ptrDrawing) return;
+      const p = { x: e.clientX, y: e.clientY };
+      ptrCtx.globalCompositeOperation = 'source-over';
+      if (ptrTool === 'eraser') {
+        ptrCtx.globalCompositeOperation = 'destination-out';
+        ptrCtx.strokeStyle = 'rgba(0,0,0,1)';
+        ptrCtx.lineWidth = 32;
+      } else if (ptrTool === 'marker') {
+        ptrCtx.strokeStyle = ptrColor2;
+        ptrCtx.globalAlpha = 0.35;
+        ptrCtx.lineWidth = 18;
+      } else {
+        ptrCtx.strokeStyle = ptrColor2;
+        ptrCtx.globalAlpha = 1;
+        ptrCtx.lineWidth = 4;
+      }
+      ptrCtx.beginPath();
+      ptrCtx.moveTo(ptrLast.x, ptrLast.y);
+      ptrCtx.lineTo(p.x, p.y);
+      ptrCtx.stroke();
+      ptrLast = p;
+      ptrCtx.globalAlpha = 1;
+    });
+    const ptrEnd = e => {
+      ptrDrawing = false;
+      try { ptrCanvas.releasePointerCapture(e.pointerId); } catch (err) {}
+    };
+    ptrCanvas.addEventListener('pointerup', ptrEnd);
+    ptrCanvas.addEventListener('pointercancel', ptrEnd);
+  }
+
+  document.getElementById('ptrClose').addEventListener('click', ptrClose);
+  document.getElementById('ptrClear').addEventListener('click', () => {
+    if (ptrCtx) ptrCtx.clearRect(0, 0, ptrCanvas.width, ptrCanvas.height);
+  });
+  document.querySelectorAll('.ptr-tool[data-pto]').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.ptr-tool[data-pto]').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      ptrTool = b.dataset.pto;
+    });
+  });
+  document.querySelectorAll('.ptr-color').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.ptr-color').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      ptrColor2 = b.dataset.color;
+    });
+  });
+  // 工具条拖动（按住标题栏）
+  (function () {
+    const head = document.getElementById('ptrTbHead');
+    let drag = false, sx = 0, sy = 0, bx = 0, by = 0;
+    head.addEventListener('pointerdown', e => {
+      if (e.target.closest('#ptrClose')) return;
+      drag = true; sx = e.clientX; sy = e.clientY;
+      const r = ptrToolbar.getBoundingClientRect();
+      bx = r.left; by = r.top;
+      try { head.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    head.addEventListener('pointermove', e => {
+      if (!drag) return;
+      ptrToolbar.style.left = (bx + e.clientX - sx) + 'px';
+      ptrToolbar.style.top = (by + e.clientY - sy) + 'px';
+    });
+    head.addEventListener('pointerup', e => {
+      drag = false;
+      try { head.releasePointerCapture(e.pointerId); } catch (err) {}
+    });
+  })();
+  // Esc 退出教鞭
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && ptrActive) ptrClose();
+  });
+  // 窗口尺寸变化时保持批注（重设画布前先备份）
+  window.addEventListener('resize', () => { if (ptrActive) ptrResize(true); });
+
   // 打开窗口时自动初始化对应内容
   const _openOrig = WM.open.bind(WM);
-  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'admin') openAdmin(); else if (id === 'gallery') loadGallery(); else if (id === 'account') loadAccount(); else if (id === 'music') { muRefreshAdminUI(); if (!muMediaLoaded) loadMedia(); } else if (id === 'photos') { if (!PH_LIST.length) phLoadSample(); } };
+  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'admin') openAdmin(); else if (id === 'gallery') loadGallery(); else if (id === 'account') loadAccount(); else if (id === 'music') { muRefreshAdminUI(); if (!muMediaLoaded) loadMedia(); } else if (id === 'photos') { if (!PH_LIST.length) phLoadSample(); } else if (id === 'pointer') { ptrOpen(); } };
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   }
