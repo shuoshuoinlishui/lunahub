@@ -99,8 +99,8 @@ body[data-fs="xl"] { --fs: 15px; --fs-title: 17px; --fs-big: 20px; }
   display: grid; place-items: center; text-shadow: 0 1px 1px rgba(0,0,0,.4);
 }
 .winbtns .wb:hover { filter: brightness(1.12); }
-.winbtns .wb.max { text-indent: -1px; }
-.winbtns .wb.close { background: linear-gradient(180deg, #e07a5a, #c1381c); }
+.winbtns .wb.max { text-indent: -2.5px; }
+.winbtns .wb.close { background: linear-gradient(180deg, #e07a5a, #c1381c); text-indent: -1px; }
 
 /* 菜单栏 */
 .menubar {
@@ -505,3 +505,40 @@ body.theme-classic .desktop { background: #3a6ea5 !important; }
 .au-info { font-size: 12px; }
 .au-info b { color: #0a3f8f; }
 .au-acts { display: flex; gap: 4px; }
+
+/* ===== Internet Explorer 6 风格浏览器 ===== */
+.ie-body { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.ie-toolbar { display: flex; align-items: center; gap: 6px; padding: 4px 6px; background: linear-gradient(180deg, #f5f4ea, #ece9d8); border-bottom: 1px solid #aca899; flex-wrap: wrap; }
+.ie-nav { display: flex; gap: 2px; flex: none; }
+.ie-btn { width: 26px; height: 24px; border: 1px solid #aca899; border-radius: 3px; background: linear-gradient(180deg, #fff, #ece9d8); color: #333; font-size: 12px; cursor: pointer; display: grid; place-items: center; font-family: inherit; }
+.ie-btn:hover:not(:disabled) { border-color: #245edb; color: #245edb; background: linear-gradient(180deg, #fff, #d6e4fb); }
+.ie-btn:active:not(:disabled) { background: linear-gradient(180deg, #d4d0c8, #c0bcb0); }
+.ie-btn:disabled { opacity: .35; cursor: default; }
+.ie-btn.go { width: auto; padding: 0 8px; }
+.ie-addr { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.ie-addr-label { font-size: 11px; color: #888; flex: none; }
+.ie-addr-input { flex: 1; min-width: 60px; border: 1px solid #7f9db9; border-radius: 2px; font: inherit; font-size: 12px; padding: 3px 6px; background: #fff; box-shadow: inset 1px 1px 0 #aaa; }
+.ie-addr-input:focus { outline: 1px solid #245edb; outline-offset: -1px; }
+.ie-links { display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: #f5f4ea; border-bottom: 1px solid #d4d0c8; font-size: 11px; flex-wrap: wrap; }
+.ie-link-label { color: #888; flex: none; }
+.ie-link { border: none; background: none; color: #0a3f8f; cursor: pointer; font: inherit; font-size: 11px; padding: 1px 4px; border-radius: 2px; }
+.ie-link:hover { text-decoration: underline; background: #eef3fb; }
+.ie-content { flex: 1; overflow: auto; background: #fff; position: relative; }
+.ie-frame { width: 100%; height: 100%; border: none; display: block; }
+.ie-home { padding: 30px; text-align: center; }
+.ie-home h1 { font-size: 22px; color: #245edb; margin-bottom: 4px; }
+.ie-bookmarks { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 420px; margin: 0 auto; }
+.ie-bm { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 80px; padding: 12px 6px; border: 1px solid #d4d0c8; border-radius: 6px; background: linear-gradient(180deg, #fff, #f5f4ea); cursor: pointer; font: inherit; font-size: 11px; color: #333; }
+.ie-bm:hover { border-color: #245edb; background: linear-gradient(180deg, #fff, #d6e4fb); }
+.ie-bm .bm-ico { font-size: 22px; }
+.ie-loading { display: flex; align-items: center; gap: 8px; justify-content: center; padding: 40px; color: #666; font-size: 13px; position: absolute; inset: 0; background: #fff; z-index: 2; }
+.ie-spin { display: inline-block; width: 16px; height: 16px; border: 2px solid #ccc; border-top-color: #245edb; border-radius: 50%; animation: ie-spin 0.8s linear infinite; }
+@keyframes ie-spin { to { transform: rotate(360deg); } }
+.ie-fallback { text-align: center; padding: 40px 20px; color: #555; }
+.ie-fb-ico { font-size: 36px; margin-bottom: 8px; }
+.ie-fallback h3 { font-size: 15px; color: #333; margin-bottom: 6px; }
+.ie-fallback p { font-size: 12px; color: #888; margin-bottom: 4px; word-break: break-all; }
+.ie-fb-hint { font-size: 11px !important; color: #aaa !important; margin: 8px 0 12px !important; }
+.ie-open-ext { display: inline-block; padding: 5px 16px; border: 1px solid #245edb; border-radius: 4px; background: linear-gradient(180deg, #5b9bdc, #245edb); color: #fff; text-decoration: none; font-size: 12px; }
+.ie-open-ext:hover { filter: brightness(1.1); }
+.ie-statusbar { display: flex; justify-content: space-between; padding: 2px 8px; background: #ece9d8; border-top: 1px solid #aca899; font-size: 11px; color: #555; flex: none; }

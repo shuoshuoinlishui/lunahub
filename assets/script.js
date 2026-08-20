@@ -16,6 +16,7 @@
     gallery: { icon: '🖼️', title: '画廊精选' },
     donate:  { icon: '💝', title: '捐赠支持' },
     about:   { icon: '📝', title: '关于 Lunahub' },
+    browser: { icon: '🌐', title: 'Internet Explorer' },
     appearance: { icon: '🎨', title: '外观和个性化' },
     control:    { icon: '🛠️', title: '控制面板' },
     admin:     { icon: '🛡️', title: '管理后台' }
@@ -411,10 +412,15 @@
       if (!btn) return;
       const act = btn.dataset.cp;
       if (act === 'appearance') WM.open('appearance');
+      else if (act === 'network') WM.open('browser');
       else if (act === 'taskbar') WM.open('appearance');
-      else if (act === 'account') openLogin();
+      else if (act === 'account') {
+        if (loggedIn) showMsgToast('当前登录用户：' + currentUser() + (authRole === 'admin' ? '（管理员）' : ''));
+        else openLogin();
+      }
       else if (act === 'logout') doLogout();
       else if (act === 'power') { closeStart(); shutdown(); }
+      else if (act === 'addremove') showMsgToast('添加/删除程序：当前已安装 Lunahub 论坛系统 v1.0');
       else if (act === 'datetime') {
         const d = new Date();
         const s = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') +
@@ -800,9 +806,7 @@
     finally { annSubmit.disabled = false; }
   });
 
-  // 打开论坛 / 管理后台窗口时自动加载
-  const _open = WM.open.bind(WM);
-  WM.open = function (id) { _open(id); if (id === 'topics') loadForum(); else if (id === 'admin') openAdmin(); };
+  // WM.open 覆盖在浏览器模块中统一处理
 
   /* ---------- 外观和个性化（壁纸 + 窗口颜色） ---------- */
   const WALLPAPERS = [
@@ -1101,7 +1105,161 @@
     di.addEventListener('dblclick', () => WM.open(id));
   }
 
-  /* ---------- 工具函数 ---------- */
+  /* ---------- Internet Explorer 6 风格浏览器 ---------- */
+  const brwAddr = document.getElementById('brwAddr');
+  const brwContent = document.getElementById('brwContent');
+  const brwStatus = document.getElementById('brwStatus');
+  const brwTitle = document.getElementById('brwTitle');
+  const brwBack = document.getElementById('brwBack');
+  const brwFwd = document.getElementById('brwFwd');
+  const brwStop = document.getElementById('brwStop');
+  const brwRefresh = document.getElementById('brwRefresh');
+  const brwHome = document.getElementById('brwHome');
+  const brwGo = document.getElementById('brwGo');
+  const brwLinks = document.getElementById('brwLinks');
+
+  let brwHistory = [];
+  let brwHistIdx = -1;
+  let brwTimer = null;
+
+  function normalizeUrl(input) {
+    input = input.trim();
+    if (!input) return null;
+    if (input === 'about:home' || input === 'home') return 'about:home';
+    if (!/^https?:\/\//i.test(input)) {
+      if (/^[\w.-]+\.[a-z]{2,}/i.test(input)) input = 'https://' + input;
+      else input = 'https://www.bing.com/search?q=' + encodeURIComponent(input);
+    }
+    return input;
+  }
+
+  function showHome() {
+    brwContent.innerHTML = '<div class="ie-home">' +
+      '<h1>🌐 Internet Explorer</h1>' +
+      '<p style="color:#666;font-size:13px;margin:8px 0 16px">Lunahub 内置浏览器 — 在地址栏输入网址或点击收藏夹访问</p>' +
+      '<div class="ie-bookmarks">' +
+      '<button class="ie-bm" data-url="https://www.bing.com"><span class="bm-ico">🔍</span><span>Bing 搜索</span></button>' +
+      '<button class="ie-bm" data-url="https://www.wikipedia.org"><span class="bm-ico">📚</span><span>Wikipedia</span></button>' +
+      '<button class="ie-bm" data-url="https://example.com"><span class="bm-ico">📄</span><span>Example.com</span></button>' +
+      '<button class="ie-bm" data-url="https://www.w3.org"><span class="bm-ico">🌍</span><span>W3C</span></button>' +
+      '<button class="ie-bm" data-url="https://archive.org"><span class="bm-ico">💾</span><span>Internet Archive</span></button>' +
+      '</div>' +
+      '<p style="color:#aaa;font-size:11px;margin-top:20px">页面通过内置代理加载；需要登录的网站、部分动态站点可能显示异常，属正常现象。</p>' +
+      '</div>';
+    bindBookmarks();
+    brwAddr.value = '';
+    brwTitle.textContent = 'Internet Explorer';
+    brwStatus.textContent = '完成';
+  }
+
+  function bindBookmarks() {
+    brwContent.querySelectorAll('.ie-bm').forEach(b => {
+      b.addEventListener('click', () => navigate(b.dataset.url));
+    });
+  }
+
+  function navigate(rawUrl) {
+    const url = normalizeUrl(rawUrl);
+    if (!url) return;
+    if (url === 'about:home') { showHome(); brwHistIdx++; brwHistory = brwHistory.slice(0, brwHistIdx).concat(['about:home']); updateNav(); return; }
+
+    brwStatus.textContent = '正在打开 ' + url.replace(/^https?:\/\//, '') + ' …';
+    brwStop.disabled = false;
+    // 加载提示与 iframe 并存（不要清空整个容器，否则 iframe 会被反复移除导致重载）
+    brwContent.innerHTML = '<div class="ie-loading"><span class="ie-spin"></span> 正在加载页面…</div>';
+
+    clearTimeout(brwTimer);
+    brwTimer = setTimeout(() => {
+      brwContent.innerHTML = '<div class="ie-fallback">' +
+        '<div class="ie-fb-ico">⚠️</div>' +
+        '<h3>无法加载页面</h3>' +
+        '<p>' + esc(url) + '</p>' +
+        '<p class="ie-fb-hint">加载超时，可能是网络问题或该网站不可用。</p>' +
+        '<a href="' + esc(url) + '" target="_blank" rel="noopener" class="ie-open-ext">在新标签页打开 ↗</a>' +
+        '</div>';
+      brwStop.disabled = true;
+      brwStatus.textContent = '错误';
+    }, 20000);
+
+    const iframe = document.createElement('iframe');
+    iframe.className = 'ie-frame';
+    iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
+    iframe.setAttribute('referrerpolicy', 'no-referrer');
+    iframe.src = '/api/proxy?url=' + encodeURIComponent(url);
+
+    iframe.addEventListener('load', () => {
+      clearTimeout(brwTimer);
+      const tip = brwContent.querySelector('.ie-loading');
+      if (tip) tip.remove();
+      brwStop.disabled = true;
+      brwStatus.textContent = '完成';
+      brwTitle.textContent = url.replace(/^https?:\/\//, '').split('/')[0] + ' - Internet Explorer';
+    });
+
+    iframe.addEventListener('error', () => {
+      clearTimeout(brwTimer);
+      showLoadError(url);
+    });
+
+    brwContent.appendChild(iframe);
+
+    brwAddr.value = url;
+    brwHistIdx++;
+    brwHistory = brwHistory.slice(0, brwHistIdx).concat([url]);
+    updateNav();
+  }
+
+  function showLoadError(url) {
+    brwContent.innerHTML = '<div class="ie-fallback">' +
+      '<div class="ie-fb-ico">⚠️</div>' +
+      '<h3>无法加载页面</h3>' +
+      '<p>' + esc(url) + '</p>' +
+      '<p class="ie-fb-hint">网络连接失败或该网站不可用。</p>' +
+      '</div>';
+    brwStop.disabled = true;
+    brwStatus.textContent = '错误';
+  }
+
+  function updateNav() {
+    brwBack.disabled = brwHistIdx <= 0;
+    brwFwd.disabled = brwHistIdx >= brwHistory.length - 1;
+  }
+
+  brwGo.addEventListener('click', () => navigate(brwAddr.value));
+  brwAddr.addEventListener('keydown', e => { if (e.key === 'Enter') navigate(brwAddr.value); });
+  brwBack.addEventListener('click', () => {
+    if (brwHistIdx <= 0) return;
+    brwHistIdx--;
+    const url = brwHistory[brwHistIdx];
+    if (url === 'about:home') showHome(); else { brwAddr.value = url; navigateSilent(url); }
+    updateNav();
+  });
+  brwFwd.addEventListener('click', () => {
+    if (brwHistIdx >= brwHistory.length - 1) return;
+    brwHistIdx++;
+    const url = brwHistory[brwHistIdx];
+    if (url === 'about:home') showHome(); else { brwAddr.value = url; navigateSilent(url); }
+    updateNav();
+  });
+  brwStop.addEventListener('click', () => { clearTimeout(brwTimer); const f = brwContent.querySelector('iframe'); if (f) f.src = 'about:blank'; brwStop.disabled = true; brwStatus.textContent = '已停止'; });
+  brwRefresh.addEventListener('click', () => { if (brwHistIdx >= 0) { const u = brwHistory[brwHistIdx]; if (u === 'about:home') showHome(); else navigateSilent(u); } });
+  brwHome.addEventListener('click', () => navigate('about:home'));
+  brwLinks.addEventListener('click', e => { const b = e.target.closest('.ie-link'); if (b) navigate(b.dataset.url); });
+
+  function navigateSilent(url) {
+    brwStatus.textContent = '正在刷新…';
+    brwContent.innerHTML = '';
+    const iframe = document.createElement('iframe');
+    iframe.src = '/api/proxy?url=' + encodeURIComponent(url); iframe.className = 'ie-frame';
+    iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
+    iframe.setAttribute('referrerpolicy', 'no-referrer');
+    brwContent.appendChild(iframe);
+    iframe.addEventListener('load', () => { brwStatus.textContent = '完成'; brwTitle.textContent = url.replace(/^https?:\/\//, '').split('/')[0] + ' - Internet Explorer'; });
+  }
+
+  // 打开窗口时自动初始化对应内容
+  const _openOrig = WM.open.bind(WM);
+  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'admin') openAdmin(); };
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   }

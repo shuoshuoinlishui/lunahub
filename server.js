@@ -1,5 +1,6 @@
 // Lunahub 论坛后端：静态托管 + 账户/话题/嵌套回复/点赞/管理员 API（Node 内置模块，零依赖）
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -235,6 +236,129 @@ function serveStatic(p, res) {
   });
 }
 
+/* ---------- 内置浏览器代理（绕过 X-Frame-Options 限制） ---------- */
+const PROXY_UA = 'Mozilla/5.0 (Windows XP; LunahubIE/6.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+const PRIVATE_HOST = /^(localhost$|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|::1$|0\.0\.0\.0$)/i;
+
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+function proxyBlocked(u2) {
+  if (!/^https?:$/.test(u2.protocol)) return true;
+  return PRIVATE_HOST.test(u2.hostname);
+}
+function proxyError(res, msg, url) {
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Security-Policy': 'sandbox allow-popups',
+    'Cache-Control': 'no-store'
+  });
+  res.end('<!doctype html><html><head><meta charset="utf-8"><style>' +
+    'body{font-family:Tahoma,SimSun,sans-serif;background:#fff;padding:48px 24px;color:#333;text-align:center}' +
+    'h2{color:#c00;font-size:15px;margin:0 0 10px}p{font-size:12px;color:#888;word-break:break-all;margin:4px 0}' +
+    'a{color:#06c;font-size:12px}</style></head><body>' +
+    '<h2>⚠️ ' + escHtml(msg) + '</h2>' +
+    '<p>' + escHtml(url || '') + '</p>' +
+    (url ? '<p style="margin-top:14px"><a href="' + escHtml(url) + '" target="_blank" rel="noopener">在新窗口中打开 ↗</a></p>' : '') +
+    '</body></html>');
+}
+function decodeBuf(buf, contentType) {
+  let charset = (String(contentType).match(/charset=([\w-]+)/i) || [])[1];
+  if (!charset) {
+    const head = buf.slice(0, 4096).toString('latin1');
+    charset = (head.match(/<meta[^>]+charset\s*=\s*["']?([\w-]+)/i) || [])[1];
+  }
+  charset = (charset || 'utf-8').toLowerCase();
+  try { return new TextDecoder(charset).decode(buf); }
+  catch (e) { return buf.toString('utf8'); }
+}
+function proxyWrap(u) { return '/api/proxy?url=' + encodeURIComponent(u); }
+function rewriteHtml(html, baseUrl) {
+  return html.replace(/\s(href|src|action|poster|data-src)\s*=\s*("([^"]*)"|'([^']*)')/gi, (m, attr, _q, d1, d2) => {
+    const val = d1 !== undefined ? d1 : d2;
+    if (!val || /^(#|javascript:|mailto:|tel:|data:|about:|blob:)/i.test(val)) return m;
+    let abs;
+    try { abs = new URL(val, baseUrl).href; } catch (e) { return m; }
+    if (!/^https?:$/i.test(new URL(abs).protocol)) return m;
+    return ' ' + attr + '="' + proxyWrap(abs) + '"';
+  });
+}
+function rewriteCss(css, baseUrl) {
+  return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (m, _q, val) => {
+    if (/^(data:|#)/i.test(val)) return m;
+    let abs;
+    try { abs = new URL(val, baseUrl).href; } catch (e) { return m; }
+    if (!/^https?:$/i.test(new URL(abs).protocol)) return m;
+    return 'url("' + proxyWrap(abs) + '")';
+  });
+}
+function proxyFetch(target, res, depth) {
+  let done = false;
+  const fail = msg => { if (done) return; done = true; proxyError(res, msg, target); };
+  if (!target) return fail('缺少 url 参数');
+  let u2;
+  try { u2 = new URL(target); } catch (e) { return fail('无效的网址'); }
+  if (proxyBlocked(u2)) return fail('出于安全考虑，不允许代理访问本地 / 内网地址');
+  if (depth > 5) return fail('重定向次数过多');
+  const mod = u2.protocol === 'https:' ? https : http;
+  const preq = mod.request({
+    hostname: u2.hostname,
+    port: u2.port || (u2.protocol === 'https:' ? 443 : 80),
+    path: u2.pathname + u2.search,
+    method: 'GET',
+    headers: {
+      'User-Agent': PROXY_UA,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Encoding': 'identity',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+    },
+    timeout: 12000
+  }, pres => {
+    const code = pres.statusCode || 0;
+    const loc = pres.headers.location;
+    if ([301, 302, 303, 307, 308].includes(code) && loc) {
+      pres.resume();
+      let next;
+      try { next = new URL(loc, u2).href; } catch (e) { return fail('重定向地址无效'); }
+      return proxyFetch(next, res, depth + 1);
+    }
+    if (code >= 400) { pres.resume(); return fail('对方服务器返回 ' + code); }
+    const ctype = String(pres.headers['content-type'] || 'application/octet-stream');
+    const chunks = [];
+    let size = 0;
+    pres.on('data', c => {
+      size += c.length;
+      if (size > 8e6) { pres.destroy(); return fail('页面太大（超过 8MB）'); }
+      chunks.push(c);
+    });
+    pres.on('error', () => fail('数据传输中断'));
+    pres.on('end', () => {
+      if (done) return;
+      done = true;
+      const buf = Buffer.concat(chunks);
+      if (/text\/html|application\/xhtml/i.test(ctype)) {
+        const html = rewriteHtml(decodeBuf(buf, ctype), u2.href);
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': 'sandbox allow-scripts allow-forms allow-popups',
+          'Cache-Control': 'no-store'
+        });
+        return res.end(html);
+      }
+      if (/text\/css/i.test(ctype)) {
+        const css = rewriteCss(decodeBuf(buf, ctype), u2.href);
+        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' });
+        return res.end(css);
+      }
+      res.writeHead(200, { 'Content-Type': ctype, 'Cache-Control': 'no-store' });
+      res.end(buf);
+    });
+  });
+  preq.on('timeout', () => { preq.destroy(); fail('连接超时'); });
+  preq.on('error', () => fail('无法连接到服务器（网络错误或站点不可用）'));
+  preq.end();
+}
+
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -455,6 +579,11 @@ const server = http.createServer(async (req, res) => {
     });
     saveForum(d);
     return sendJSON(res, 201, { ok: true, announcement: d.announcements[0] });
+  }
+
+  // === 内置浏览器代理 ===
+  if (p === '/api/proxy' && req.method === 'GET') {
+    return proxyFetch(u.searchParams.get('url'), res, 0);
   }
 
   if (p.startsWith('/api/')) return sendJSON(res, 404, { error: 'not found' });
