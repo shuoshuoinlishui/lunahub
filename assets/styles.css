@@ -140,6 +140,38 @@ body[data-fs="xl"] { --fs: 15px; --fs-title: 17px; --fs-big: 20px; }
 .drive { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 4px; }
 .drive:hover { background: #eef3fb; }
 
+/* 我的电脑：驱动器按钮重置 + 文件浏览页 + 菜单下拉 */
+.drive { border: none; background: transparent; font: inherit; color: inherit; width: 100%; text-align: left; cursor: pointer; }
+.drive:active { background: #d8e6f5; }
+.home-body { padding: 0; }
+.home-body .hero-body { padding: 12px; }
+.browser-body { display: flex; flex-direction: column; min-height: 220px; }
+.browser-body[hidden] { display: none; }
+.addr-bar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid #d4d0c8; background: linear-gradient(#fff,#f1efe7); }
+.addr-btn { border: 1px solid #aca899; background: linear-gradient(#fff,#ece9d8); border-radius: 3px; padding: 2px 8px; cursor: pointer; font-size: 13px; }
+.addr-btn:hover { background: linear-gradient(#fff,#d8e6f5); }
+.addr-btn:active { background: #d8e6f5; }
+.addr-path { flex: 1; font-size: var(--fs); color: #333; padding: 2px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-grid { display: flex; flex-wrap: wrap; gap: 14px; padding: 14px; align-content: flex-start; flex: 1; }
+.file-item { display: flex; flex-direction: column; align-items: center; width: 76px; padding: 6px 2px; border: 1px solid transparent; border-radius: 4px; background: transparent; font: inherit; color: inherit; cursor: default; text-align: center; }
+.file-item:hover { background: #eef3fb; border-color: #c3d5e8; }
+.file-item.selected { background: #3a6ea5; color: #fff; border-color: #245edb; }
+.file-item .fi-ico { font-size: 32px; line-height: 1; }
+.file-item .fi-name { font-size: 12px; margin-top: 5px; word-break: break-all; line-height: 1.25; }
+.browser-body.view-list .file-grid { flex-direction: column; gap: 0; padding: 0; }
+.browser-body.view-list .file-item { flex-direction: row; width: 100%; padding: 4px 10px; gap: 10px; border-radius: 0; border: none; border-bottom: 1px solid #eef2f7; }
+.browser-body.view-list .file-item .fi-ico { font-size: 16px; }
+.browser-body.view-list .file-item .fi-name { margin-top: 0; font-size: var(--fs); }
+.addr-status { padding: 4px 10px; border-top: 1px solid #d4d0c8; background: #f1efe7; font-size: 11px; color: #555; }
+.menubar .mb-item { padding: 3px 8px; border-radius: 3px 3px 0 0; cursor: default; }
+.menubar .mb-item:hover, .menubar .mb-item.active { background: #c3d5e8; }
+#homeMenubar { position: relative; }
+.menu-dropdown { position: absolute; top: 100%; left: 0; min-width: 210px; background: #fff; border: 1px solid #aca899; box-shadow: 3px 3px 8px rgba(0,0,0,.25); padding: 3px; z-index: 60; font-size: var(--fs); }
+.menu-dropdown[hidden] { display: none; }
+.menu-item { padding: 5px 24px; cursor: default; border-radius: 2px; white-space: pre; }
+.menu-item:hover { background: #3a6ea5; color: #fff; }
+.menu-sep { height: 1px; background: #d4d0c8; margin: 4px 2px; }
+
 /* ===== 论坛分区 ===== */
 .cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .cat h3 { margin: 0 0 6px; font-size: 12px; color: #0a3f8f; border-bottom: 1px solid #cfd6e6; padding-bottom: 3px; }

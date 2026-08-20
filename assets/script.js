@@ -2647,9 +2647,203 @@
   // 窗口尺寸变化时保持批注（重设画布前先备份）
   window.addEventListener('resize', () => { if (ptrActive) ptrResize(true); });
 
+  /* ===== 我的电脑：模拟文件系统 + 菜单 + 驱动器导航 ===== */
+  const MYDOCS = [
+    { name: '欢迎.txt', type: 'txt', body: '欢迎来到 Lunahub！\n\n这里保存着旧时代的一片净土。\n\n双击文本文件可以用记事本打开，双击图片可以用 Luna照片查看器浏览。\n\n—— Lunahub 团队' },
+    { name: '使用说明.txt', type: 'txt', body: 'Lunahub 使用说明\n\n1. 桌面图标双击打开应用\n2. 开始菜单 → 所有程序\n3. 论坛分区可查看各板块动态\n4. 控制面板可更换主题与字体\n5. 画图 / 电子教鞭 / 照片查看器 随时可用\n\n遇到问题请到「反馈与帮助」板块留言。' },
+    { name: 'Blue hills.jpg', type: 'img', url: 'assets/samples/blue-hills.jpg' },
+    { name: 'Sunset.jpg', type: 'img', url: 'assets/samples/sunset.jpg' },
+    { name: 'Water lilies.jpg', type: 'img', url: 'assets/samples/water-lilies.jpg' },
+    { name: 'Winter.jpg', type: 'img', url: 'assets/samples/winter.jpg' }
+  ];
+  const DRIVE_C = [
+    { name: 'Documents and Settings', type: 'folder', items: [
+      { name: 'Administrator', type: 'folder', items: [
+        { name: 'My Documents', type: 'folder', items: MYDOCS },
+        { name: '桌面', type: 'folder', items: [] }
+      ] }
+    ]},
+    { name: 'Program Files', type: 'folder', items: [
+      { name: 'Lunahub', type: 'folder', items: [
+        { name: 'readme.txt', type: 'txt', body: 'Lunahub 应用程序目录。\n\n本目录包含 Lunahub 桌面环境运行所需的资源文件，请勿随意删除。' },
+        { name: 'changelog.txt', type: 'txt', body: '更新日志\n\nv1.0 初始版本\n- Windows XP 风格桌面\n- 论坛 / 画廊 / 媒体播放器\n- 画图 / 照片查看器 / 电子教鞭' }
+      ] }
+    ]},
+    { name: 'WINDOWS', type: 'folder', items: [
+      { name: 'notepad.exe', type: 'app', app: 'notepad' },
+      { name: 'explorer.exe', type: 'app', app: 'home' },
+      { name: 'system32', type: 'folder', items: [] }
+    ]},
+    { name: 'autoexec.bat', type: 'txt', body: '@echo off\nPATH C:\\WINDOWS;C:\\WINDOWS\\system32\n' }
+  ];
+  const DRIVE_D = [
+    { name: 'AUTORUN.INF', type: 'txt', body: '[autorun]\nopen=setup.exe\nicon=setup.exe,0' },
+    { name: 'setup.txt', type: 'txt', body: 'Lunahub 安装程序\n\n运行 setup.exe 开始安装 Lunahub 桌面环境。' }
+  ];
+  const VFS = { '我的文档': MYDOCS, '本地磁盘 (C:)': DRIVE_C, '光盘 (D:)': DRIVE_D };
+
+  const homeHero = document.getElementById('homeHero');
+  const homeBrowser = document.getElementById('homeBrowser');
+  const homeFiles = document.getElementById('homeFiles');
+  const homePath = document.getElementById('homePath');
+  const homeStatus = document.getElementById('homeStatus');
+  let homeStack = [];
+  let homeSelected = null;
+
+  function homeFileIcon(it) {
+    if (it.type === 'folder') return '📁';
+    if (it.type === 'txt') return '📄';
+    if (it.type === 'img') return '🖼️';
+    if (it.type === 'app') return '⚙️';
+    return '📦';
+  }
+  function homePathText() { return homeStack.length ? homeStack.map(s => s.name).join(' \\ ') : '我的电脑'; }
+  function homeRenderItems(items) {
+    homeFiles.innerHTML = '';
+    homeSelected = null;
+    if (!items || !items.length) { homeFiles.innerHTML = '<div class="empty-hint">此文件夹为空</div>'; homeStatus.textContent = '0 个项目'; return; }
+    items.forEach(it => {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'file-item' + (it.type === 'folder' ? ' is-folder' : '');
+      el.innerHTML = '<span class="fi-ico">' + homeFileIcon(it) + '</span><span class="fi-name">' + esc(it.name) + '</span>';
+      el.addEventListener('click', () => {
+        homeFiles.querySelectorAll('.file-item').forEach(c => c.classList.remove('selected'));
+        el.classList.add('selected');
+        homeSelected = it;
+        homeStatus.textContent = '选中: ' + it.name;
+      });
+      el.addEventListener('dblclick', () => homeOpen(it));
+      homeFiles.appendChild(el);
+    });
+    homeStatus.textContent = items.length + ' 个项目';
+  }
+  function homeShowHero() {
+    if (!homeHero) return;
+    homeHero.hidden = false; homeBrowser.hidden = true;
+    homePath.textContent = '我的电脑'; homeStatus.textContent = ''; homeStack = []; homeSelected = null;
+  }
+  function homeEnter(loc) {
+    const items = VFS[loc]; if (!items) { showMsgToast('无法访问 ' + loc); return; }
+    homeStack = [{ name: loc, items }];
+    homeRenderItems(items);
+    homeHero.hidden = true; homeBrowser.hidden = false;
+    homePath.textContent = homePathText();
+  }
+  function homeEnterFolder(folder) {
+    homeStack.push({ name: folder.name, items: folder.items || [] });
+    homeRenderItems(folder.items || []);
+    homeHero.hidden = true; homeBrowser.hidden = false;
+    homePath.textContent = homePathText();
+  }
+  function homeUp() {
+    if (!homeStack.length) return;
+    if (homeStack.length <= 1) { homeShowHero(); return; }
+    homeStack.pop();
+    const cur = homeStack[homeStack.length - 1];
+    homeRenderItems(cur.items);
+    homePath.textContent = homePathText();
+  }
+  function homeOpen(it) {
+    if (it.type === 'folder') { homeEnterFolder(it); }
+    else if (it.type === 'txt') {
+      WM.open('notepad');
+      const np = document.getElementById('npText');
+      const npt = document.getElementById('npTitle');
+      if (np) np.value = it.body || '';
+      if (npt) npt.textContent = it.name + ' - 记事本';
+      try { localStorage.setItem('lunahub_notepad', JSON.stringify({ text: it.body || '', title: it.name + ' - 记事本' })); } catch (e) {}
+    }
+    else if (it.type === 'img') { WM.open('photos'); PH_LIST = [{ name: it.name, url: it.url }]; phShow(0); }
+    else if (it.type === 'app') { if (it.app) WM.open(it.app); }
+    else showMsgToast('无法打开：' + it.name);
+  }
+  document.querySelectorAll('#homeDrives .drive').forEach(b => {
+    if (b.hasAttribute('data-net')) b.addEventListener('click', () => WM.open('browser'));
+    else b.addEventListener('click', () => homeEnter(b.dataset.loc));
+  });
+  const homeUpBtn = document.getElementById('homeUp');
+  if (homeUpBtn) homeUpBtn.addEventListener('click', homeUp);
+  const homeRootBtn = document.getElementById('homeRoot');
+  if (homeRootBtn) homeRootBtn.addEventListener('click', homeShowHero);
+
+  /* —— 菜单下拉组件 —— */
+  const homeMenubar = document.getElementById('homeMenubar');
+  const homeMenuDD = document.createElement('div');
+  homeMenuDD.className = 'menu-dropdown'; homeMenuDD.hidden = true;
+  if (homeMenubar) homeMenubar.appendChild(homeMenuDD);
+  const HOME_MENUS = {
+    file: [
+      { label: '新建窗口\tCtrl+N', act: () => { WM.open('home'); showMsgToast('已打开新的「我的电脑」窗口'); } },
+      { sep: true },
+      { label: '打开', act: () => { if (homeSelected) homeOpen(homeSelected); else showMsgToast('请先选中一个项目'); } },
+      { label: '属性', act: () => { showMsgToast(homeSelected ? ('选中: ' + homeSelected.name + '（' + homeSelected.type + '）') : '未选中项目'); } },
+      { sep: true },
+      { label: '关闭', act: () => WM.close('home') }
+    ],
+    edit: [
+      { label: '全选\tCtrl+A', act: () => { homeFiles.querySelectorAll('.file-item').forEach(c => c.classList.add('selected')); } },
+      { label: '反向选择', act: () => { homeFiles.querySelectorAll('.file-item').forEach(c => c.classList.toggle('selected')); } },
+      { sep: true },
+      { label: '刷新', act: () => { if (homeStack.length) homeRenderItems(homeStack[homeStack.length - 1].items); } }
+    ],
+    view: [
+      { label: '图标', act: () => { homeBrowser.classList.remove('view-list'); homeBrowser.classList.add('view-icons'); } },
+      { label: '详细信息', act: () => { homeBrowser.classList.remove('view-icons'); homeBrowser.classList.add('view-list'); } },
+      { sep: true },
+      { label: '刷新\tF5', act: () => { if (homeStack.length) homeRenderItems(homeStack[homeStack.length - 1].items); } }
+    ],
+    fav: [
+      { label: '添加到收藏夹...', act: () => showMsgToast('已添加到收藏夹') },
+      { sep: true },
+      { label: '💬 浏览论坛', act: () => WM.open('forums') },
+      { label: '🖼️ 查看画廊', act: () => WM.open('gallery') },
+      { label: '📷 Luna照片查看器', act: () => WM.open('photos') },
+      { label: '🎨 Luna画图', act: () => WM.open('paint') },
+      { sep: true },
+      { label: '🌐 Lunahub 首页', act: () => WM.open('browser') }
+    ],
+    tools: [
+      { label: '文件夹选项...', act: () => showMsgToast('文件夹选项：XP 风格 · 单击打开 · 显示扩展名') },
+      { label: '映射网络驱动器...', act: () => WM.open('browser') },
+      { sep: true },
+      { label: '控制面板', act: () => WM.open('control') }
+    ],
+    help: [
+      { label: '帮助主题', act: () => WM.open('browser') },
+      { sep: true },
+      { label: '关于 Lunahub', act: () => WM.open('about') }
+    ]
+  };
+  function openHomeMenu(key, anchor) {
+    const items = HOME_MENUS[key] || [];
+    homeMenuDD.innerHTML = '';
+    items.forEach(mi => {
+      if (mi.sep) { const s = document.createElement('div'); s.className = 'menu-sep'; homeMenuDD.appendChild(s); return; }
+      const el = document.createElement('div');
+      el.className = 'menu-item'; el.textContent = mi.label;
+      el.addEventListener('click', () => { closeHomeMenu(); mi.act(); });
+      homeMenuDD.appendChild(el);
+    });
+    if (anchor) homeMenuDD.style.left = anchor.offsetLeft + 'px';
+    homeMenuDD.hidden = false;
+  }
+  function closeHomeMenu() { homeMenuDD.hidden = true; }
+  if (homeMenubar) {
+    homeMenubar.querySelectorAll('.mb-item').forEach(s => {
+      s.addEventListener('click', () => { if (homeMenuDD.hidden) openHomeMenu(s.dataset.menu, s); else closeHomeMenu(); });
+      s.addEventListener('mouseenter', () => { if (!homeMenuDD.hidden) openHomeMenu(s.dataset.menu, s); });
+    });
+    document.addEventListener('click', e => {
+      if (homeMenuDD.hidden) return;
+      if (homeMenuDD.contains(e.target) || (e.target && e.target.classList && e.target.classList.contains('mb-item'))) return;
+      closeHomeMenu();
+    });
+  }
+
   // 打开窗口时自动初始化对应内容
   const _openOrig = WM.open.bind(WM);
-  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'forums') { if (!forumCache) loadForum(); else renderForums(); } else if (id === 'admin') openAdmin(); else if (id === 'gallery') loadGallery(); else if (id === 'account') loadAccount(); else if (id === 'music') { muRefreshAdminUI(); if (!muMediaLoaded) loadMedia(); } else if (id === 'photos') { if (!PH_LIST.length) phLoadSample(); } else if (id === 'pointer') { ptrOpen(); } };
+  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'forums') { if (!forumCache) loadForum(); else renderForums(); } else if (id === 'admin') openAdmin(); else if (id === 'gallery') loadGallery(); else if (id === 'account') loadAccount(); else if (id === 'music') { muRefreshAdminUI(); if (!muMediaLoaded) loadMedia(); } else if (id === 'photos') { if (!PH_LIST.length) phLoadSample(); } else if (id === 'pointer') { ptrOpen(); } else if (id === 'home') homeShowHero(); };
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   }

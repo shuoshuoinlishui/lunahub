@@ -37,25 +37,36 @@
         <button class="wb close" title="关闭">✕</button>
       </span>
     </div>
-    <div class="menubar"><span>文件</span><span>编辑</span><span>查看</span><span>收藏</span><span>工具</span><span>帮助</span></div>
-    <div class="winbody hero-body">
-      <div class="hero-logo">
-        <div class="logo-orb">XP</div>
-        <div>
-          <h1>Lunahub</h1>
-          <p class="tagline">保存旧时代的一片净土 · 系统美化 · 复古计算</p>
+    <div class="menubar" id="homeMenubar"><span class="mb-item" data-menu="file">文件(<u>F</u>)</span><span class="mb-item" data-menu="edit">编辑(<u>E</u>)</span><span class="mb-item" data-menu="view">查看(<u>V</u>)</span><span class="mb-item" data-menu="fav">收藏(<u>A</u>)</span><span class="mb-item" data-menu="tools">工具(<u>T</u>)</span><span class="mb-item" data-menu="help">帮助(<u>H</u>)</span></div>
+    <div class="winbody home-body">
+      <div id="homeHero" class="hero-body">
+        <div class="hero-logo">
+          <div class="logo-orb">XP</div>
+          <div>
+            <h1>Lunahub</h1>
+            <p class="tagline">保存旧时代的一片净土 · 系统美化 · 复古计算</p>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <button class="xp-btn primary" data-open="forums">浏览论坛</button>
+          <button class="xp-btn" data-open="gallery">查看画廊</button>
+          <button class="xp-btn" data-open="about">了解更多</button>
+        </div>
+        <div class="drives" id="homeDrives">
+          <button class="drive" type="button" data-loc="我的文档">💾<span>我的文档</span></button>
+          <button class="drive" type="button" data-loc="本地磁盘 (C:)">🖴<span>本地磁盘 (C:)</span></button>
+          <button class="drive" type="button" data-loc="光盘 (D:)">📀<span>光盘 (D:)</span></button>
+          <button class="drive" type="button" data-net>🌐<span>网上邻居</span></button>
         </div>
       </div>
-      <div class="hero-actions">
-        <button class="xp-btn primary" data-open="forums">浏览论坛</button>
-        <button class="xp-btn" data-open="gallery">查看画廊</button>
-        <button class="xp-btn" data-open="about">了解更多</button>
-      </div>
-      <div class="drives">
-        <div class="drive">💾<span>我的文档</span></div>
-        <div class="drive">🖴<span>本地磁盘 (C:)</span></div>
-        <div class="drive">📀<span>光盘 (D:)</span></div>
-        <div class="drive">🌐<span>网上邻居</span></div>
+      <div id="homeBrowser" class="browser-body" hidden>
+        <div class="addr-bar">
+          <button class="addr-btn" id="homeUp" type="button" title="返回上一级">←</button>
+          <button class="addr-btn" id="homeRoot" type="button" title="转到「我的电脑」">🖥️</button>
+          <span class="addr-path" id="homePath">我的电脑</span>
+        </div>
+        <div class="file-grid" id="homeFiles"></div>
+        <div class="addr-status" id="homeStatus"></div>
       </div>
     </div>
   </section>
