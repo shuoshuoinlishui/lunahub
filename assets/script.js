@@ -15,7 +15,7 @@
     chat:    { icon: '🗨️', title: '在线聊天室' },
     gallery: { icon: '🖼️', title: '画廊精选' },
     donate:  { icon: '💝', title: '捐赠支持' },
-    about:   { icon: '📝', title: '关于 Lunahub' },
+    about:   { icon: '🛖', title: '关于 Lunahub' },
     browser: { icon: '🌐', title: 'Internet Explorer' },
     notepad: { icon: '📝', title: '记事本' },
     mines:   { icon: '💣', title: '扫雷' },
