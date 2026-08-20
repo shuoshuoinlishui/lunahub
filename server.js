@@ -10,7 +10,9 @@ const ROOT = __dirname;
 const DATA = path.join(ROOT, 'data', 'forum.json');
 const DATA_USERS = path.join(ROOT, 'data', 'users.json');
 const DATA_GALLERY = path.join(ROOT, 'data', 'gallery.json');
+const DATA_WP = path.join(ROOT, 'data', 'wallpapers.json');
 const AVATAR_DIR = path.join(ROOT, 'assets', 'avatars');
+const WP_USER_DIR = path.join(ROOT, 'assets', 'wallpapers', 'user');
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.FORUM_SECRET || 'lunahub-xp-forum-secret-v1';
 
@@ -211,11 +213,12 @@ function readBody(req) {
   return new Promise(resolve => {
     const chunks = [];
     let size = 0;
-    req.on('data', c => { chunks.push(c); size += c.length; if (size > 2e6) req.destroy(); });
+    req.on('data', c => { chunks.push(c); size += c.length; if (size > 8e6) { req.destroy(); resolve({}); return; } });
     req.on('end', () => {
       const s = Buffer.concat(chunks).toString('utf8');
       try { resolve(JSON.parse(s || '{}')); } catch (e) { resolve({}); }
     });
+    req.on('error', () => resolve({}));
   });
 }
 function getAuth(req) {
@@ -725,6 +728,70 @@ const server = http.createServer(async (req, res) => {
     Object.assign(item, v.item);
     saveGallery(d);
     return sendJSON(res, 200, { ok: true, item });
+  }
+
+  // === 壁纸（用户上传 / 管理员删除） ===
+  function loadWp() {
+    try { return JSON.parse(fs.readFileSync(DATA_WP, 'utf8')); }
+    catch (e) { return { uploaded: [] }; }
+  }
+  function saveWp(d) {
+    fs.mkdirSync(path.dirname(DATA_WP), { recursive: true });
+    fs.writeFileSync(DATA_WP, JSON.stringify(d, null, 2));
+  }
+  if (!fs.existsSync(DATA_WP)) saveWp({ uploaded: [] });
+  // 启动时确保 user 目录存在
+  try { fs.mkdirSync(WP_USER_DIR, { recursive: true }); } catch (e) {}
+  // 启动时清理悬挂文件：list 不存在的物理文件直接删记录
+  (function gcWpFiles() {
+    const d = loadWp();
+    const keep = d.uploaded.filter(it => {
+      try { fs.accessSync(path.join(WP_USER_DIR, it.file)); return true; }
+      catch (e) { return false; }
+    });
+    if (keep.length !== d.uploaded.length) { d.uploaded = keep; saveWp(d); }
+  })();
+
+  if (p === '/api/wallpapers' && req.method === 'GET') {
+    return sendJSON(res, 200, { uploaded: loadWp().uploaded || [] });
+  }
+  if (p === '/api/wallpapers' && req.method === 'POST') {
+    if (!auth) return sendJSON(res, 401, { error: '请先登录后再上传壁纸' });
+    const b = await readBody(req);
+    const data = String(b.data || '');
+    const m = data.match(/^data:(image\/(png|jpe?g|gif|webp|bmp));base64,([A-Za-z0-9+/=]+)$/i);
+    if (!m) return sendJSON(res, 400, { error: '仅支持 PNG/JPG/GIF/WebP/BMP 图片' });
+    const mime = m[1].toLowerCase();
+    const b64 = m[3];
+    // 估算字节：base64 长度 * 3/4 - padding
+    const approx = Math.floor(b64.length * 0.75);
+    if (approx > 5 * 1024 * 1024) return sendJSON(res, 400, { error: '图片超过 5MB，请压缩后再上传' });
+    const ext = ({ 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/bmp': 'bmp' })[mime] || 'jpg';
+    const id = crypto.randomBytes(8).toString('hex');
+    const file = id + '.' + ext;
+    const buf = Buffer.from(b64, 'base64');
+    try {
+      fs.mkdirSync(WP_USER_DIR, { recursive: true });
+      fs.writeFileSync(path.join(WP_USER_DIR, file), buf);
+    } catch (e) { return sendJSON(res, 500, { error: '保存失败：' + e.message }); }
+    const name = String(b.name || '未命名壁纸').trim().slice(0, 40) || '未命名壁纸';
+    const item = { id, file, name, uploader: auth.user, createdAt: Date.now() };
+    const d = loadWp();
+    d.uploaded.push(item);
+    saveWp(d);
+    return sendJSON(res, 201, { ok: true, item });
+  }
+  const mwd = p.match(/^\/api\/admin\/wallpapers\/([^/]+)\/delete$/);
+  if (mwd && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const d = loadWp();
+    const before = d.uploaded.length;
+    const target = d.uploaded.find(x => x.id === mwd[1]);
+    d.uploaded = d.uploaded.filter(x => x.id !== mwd[1]);
+    if (d.uploaded.length === before) return sendJSON(res, 404, { error: '壁纸不存在' });
+    saveWp(d);
+    if (target) { try { fs.unlinkSync(path.join(WP_USER_DIR, target.file)); } catch (e) {} }
+    return sendJSON(res, 200, { ok: true });
   }
 
   // === 内置浏览器代理 ===

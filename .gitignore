@@ -5,6 +5,10 @@ node_modules/
 data/users.json
 data/forum.json
 data/gallery.json
+data/wallpapers.json
+
+# 用户上传的图片文件
+assets/wallpapers/user/
 
 # 测试文件
 test_api.mjs

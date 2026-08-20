@@ -304,6 +304,7 @@
     trayLogin.innerHTML = '👤<span>' + u + '</span>';
     trayLogin.title = '已登录：' + u;
     updateAuthUI();
+    if (typeof window.__lunaRefreshWallpaper === 'function') window.__lunaRefreshWallpaper();
   }
   function renderAvatar(el, name, url) {
     if (!el) return;
@@ -870,6 +871,13 @@
     { id: 'davinci',      name: 'Da Vinci 达芬奇手稿', value: "url('assets/wallpapers/DaVinci.jpg') center/cover no-repeat #5a3010" },
     { id: 'freestyle',    name: 'Freestyle 自由风',     value: "url('assets/wallpapers/Windows XP Freestyle.jpg') center/cover no-repeat #2050a0" },
     { id: 'media-center', name: 'Media Center 媒体中心版', value: "url('assets/wallpapers/Windows XP Media Center Edition.jpg') center/cover no-repeat #2050a0" },
+    // 国产系统主题壁纸（用户上传）
+    { id: 'ylmf-greenmist', name: '雨林·绿光',  value: "url('assets/wallpapers/ylmf-greenmist.jpg') center/cover no-repeat #1a4a1a" },
+    { id: 'ylmf-maple',     name: '雨林·枫叶',  value: "url('assets/wallpapers/ylmf-maple.jpg') center/cover no-repeat #4a7a3a" },
+    { id: 'deepin-water',   name: 'Deepin·涟漪', value: "url('assets/wallpapers/deepin-water.jpg') center/cover no-repeat #0a2a5a" },
+    { id: 'deepin-rose',    name: 'Deepin·玫瑰', value: "url('assets/wallpapers/deepin-rose.jpg') center/cover no-repeat #5a1a1a" },
+    { id: 'addy-blue',      name: '番茄园·Addy', value: "url('assets/wallpapers/addy-blue.jpg') center/cover no-repeat #0e3a8a" },
+    { id: 'longhorn-grass', name: '草原与天空',  value: "url('assets/wallpapers/longhorn-grass.jpg') center/cover no-repeat #2050a0" },
     // 纯色
     { id: 'luna',    name: 'Luna 纯蓝',    value: "linear-gradient(160deg,#2a6fd6,#0a3f8f)" },
     { id: 'royale',  name: 'Royale 紫',    value: "linear-gradient(160deg,#6a3aa0,#2a1a5a)" },
@@ -902,10 +910,14 @@
     { id: 'classic',        name: 'Windows 经典',      wp: 'luna',         accent: 'classic',  fs: 'md', desc: 'Windows 9x 风格灰色' }
   ];
 
+  // 当前选中的壁纸（含用户上传）—— 用 localStorage 记住时也可还原
+  let currentWpId = null;
   function applyWallpaper(wp) {
+    if (!wp) return;
     desktop.style.background = wp.value;
+    currentWpId = wp.id;
     try { localStorage.setItem('lunahub_wp', wp.id); } catch (e) {}
-    document.querySelectorAll('#wpGrid .wp').forEach(el => el.classList.toggle('sel', el.dataset.id === wp.id));
+    document.querySelectorAll('#wpGrid .wp, #wpUserGrid .wp').forEach(el => el.classList.toggle('sel', el.dataset.id === wp.id));
     document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
   }
   function applyAccent(a) {
@@ -922,22 +934,174 @@
     document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
   }
   function applyTheme(t) {
-    const wp = WALLPAPERS.find(w => w.id === t.wp);
+    const wp = wpById(t.wp);
     const ac = ACCENTS.find(a => a.id === t.accent);
     if (wp) applyWallpaper(wp);
     if (ac) applyAccent(ac);
     if (t.fs) applyFontSize(t.fs);
     try { localStorage.setItem('lunahub_theme', t.id); } catch (e) {}
-    // 经典主题特殊：扁平灰色 + 纯蓝背景
     if (t.id === 'classic') document.body.classList.add('theme-classic');
     else document.body.classList.remove('theme-classic');
     document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.toggle('sel', el.dataset.theme === t.id));
   }
 
   const wpGrid = document.getElementById('wpGrid');
+  const wpUserGrid = document.getElementById('wpUserGrid');
+  let customWPs = [];   // 从 /api/wallpapers 加载
+  function wpById(id) {
+    if (!id) return null;
+    const built = WALLPAPERS.find(w => w.id === id);
+    if (built) return built;
+    const u = customWPs.find(x => x.id === id);
+    if (u) return { id: u.id, name: u.name, value: "url('/assets/wallpapers/user/" + u.file + "') center/cover no-repeat #1a3a6a", custom: true };
+    return null;
+  }
+
+  /* ---------- 用户上传壁纸：上传 / 删除 / 提取 ---------- */
+  function isAdminRole() { try { return localStorage.getItem(ROLE_KEY) === 'admin'; } catch (e) { return false; } }
+  const wpUploadBtn = document.getElementById('wpUpload');
+  const wpExtractBtn = document.getElementById('wpExtract');
+  const wpMenuUploadBtn = document.getElementById('wpMenuUpload');
+  const wpFileInput = document.getElementById('wpFile');
+  const wpTip = document.getElementById('wpTip');
+
+  function refreshWpUI() {
+    // 上传按钮：未登录禁用
+    if (loggedIn) {
+      wpUploadBtn.disabled = false; wpUploadBtn.title = '';
+      wpExtractBtn.disabled = false;
+      wpTip.textContent = isAdminRole()
+        ? '你是管理员：登录后可上传壁纸，可删除任意上传项'
+        : '已登录：可上传壁纸，管理员可删除上传项';
+    } else {
+      wpUploadBtn.disabled = true; wpUploadBtn.title = '请先登录';
+      wpExtractBtn.disabled = false;
+      wpTip.textContent = '登录后可上传自己的壁纸，管理员可删除上传项';
+    }
+  }
+  refreshWpUI();
+
+  function renderUserWPs() {
+    wpUserGrid.innerHTML = '';
+    if (!customWPs.length) {
+      const empty = document.createElement('div');
+      empty.className = 'wp-empty';
+      empty.textContent = '（还没有上传的壁纸）';
+      wpUserGrid.appendChild(empty);
+      return;
+    }
+    const isAdmin = isAdminRole();
+    customWPs.forEach(u => {
+      const el = document.createElement('div');
+      el.className = 'wp wp-custom'; el.dataset.id = u.id; el.title = (u.name || '未命名') + ' · 由 ' + u.uploader + ' 上传';
+      el.style.background = "url('/assets/wallpapers/user/" + u.file + "') center/cover no-repeat";
+      el.innerHTML = '<span>' + (u.name || '未命名') + '</span>'; // +
+        // (isAdmin ? '<button class="wp-del" title="删除" data-id="' + u.id + '">✕</button>' : '');
+      if (isAdmin) {
+        const del = document.createElement('button');
+        del.className = 'wp-del'; del.title = '删除'; del.textContent = '✕';
+        del.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          if (!confirm('确定要删除这张壁纸「' + (u.name || '未命名') + '」吗？此操作不可恢复。')) return;
+          try {
+            await api('POST', '/api/admin/wallpapers/' + u.id + '/delete');
+            showMsgToast('已删除');
+            if (currentWpId === u.id) applyWallpaper(WALLPAPERS[0]); // 删的是当前 → 回退
+            await loadCustomWPs();
+          } catch (e) { showMsgToast('删除失败：' + e.message); }
+        });
+        el.appendChild(del);
+      }
+      el.addEventListener('click', () => applyWallpaper({ id: u.id, name: u.name, value: el.style.background }));
+      wpUserGrid.appendChild(el);
+    });
+  }
+
+  async function loadCustomWPs() {
+    try {
+      const d = await api('GET', '/api/wallpapers');
+      customWPs = (d && d.uploaded) || [];
+    } catch (e) { customWPs = []; }
+    renderUserWPs();
+    // 应用 localStorage 还原（如果是用户上传的）
+    try {
+      const saved = localStorage.getItem('lunahub_wp');
+      if (saved && !WALLPAPERS.some(w => w.id === saved)) {
+        const u = customWPs.find(x => x.id === saved);
+        if (u) applyWallpaper({ id: u.id, name: u.name, value: "url('/assets/wallpapers/user/" + u.file + "') center/cover no-repeat #1a3a6a" });
+      }
+    } catch (e) {}
+  }
+
+  wpUploadBtn.addEventListener('click', () => {
+    if (!loggedIn) { showMsgToast('请先登录后再上传壁纸'); return; }
+    wpFileInput.click();
+  });
+  wpFileInput.addEventListener('change', () => {
+    const f = wpFileInput.files && wpFileInput.files[0];
+    if (!f) return;
+    if (!/^image\/(png|jpe?g|gif|webp|bmp)$/i.test(f.type)) {
+      showMsgToast('仅支持 PNG/JPG/GIF/WebP/BMP 格式');
+      wpFileInput.value = ''; return;
+    }
+    if (f.size > 5 * 1024 * 1024) { showMsgToast('图片超过 5MB'); wpFileInput.value = ''; return; }
+    const defaultName = f.name.replace(/\.[^.]+$/, '').slice(0, 30) || '我的壁纸';
+    const name = prompt('给壁纸起个名字：', defaultName) || defaultName;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const d = await api('POST', '/api/wallpapers', { name, data: reader.result });
+        showMsgToast('已上传：' + (d.item && d.item.name));
+        wpFileInput.value = '';
+        if (!wpUserGrid.hidden) await loadCustomWPs();
+        else { wpUserGrid.hidden = false; await loadCustomWPs(); }
+        if (d.item) {
+          const u = d.item;
+          applyWallpaper({ id: u.id, name: u.name, value: "url('/assets/wallpapers/user/" + u.file + "') center/cover no-repeat #1a3a6a" });
+        }
+      } catch (e) { showMsgToast('上传失败：' + e.message); wpFileInput.value = ''; }
+    };
+    reader.onerror = () => { showMsgToast('读取文件失败'); wpFileInput.value = ''; };
+    reader.readAsDataURL(f);
+  });
+  wpExtractBtn.addEventListener('click', async () => {
+    if (!currentWpId) { showMsgToast('请先选择一张壁纸'); return; }
+    const wp = wpById(currentWpId);
+    if (!wp) { showMsgToast('当前壁纸未找到'); return; }
+    // 从 value 字符串里抽出 url('...')
+    const m = wp.value && wp.value.match(/url\((['"]?)([^'")]+)\1\)/i);
+    if (!m) { showMsgToast('当前壁纸无法提取（纯色/渐变）'); return; }
+    let url = m[2];
+    // 相对路径补全
+    if (url.startsWith('/')) url = location.origin + url;
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const blob = await r.blob();
+      let ext = 'jpg';
+      const t = blob.type.split('/')[1] || 'jpeg';
+      if (/^(png|jpeg|jpg|gif|webp|bmp)$/i.test(t)) ext = t === 'jpeg' ? 'jpg' : t;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = ((wp.name || 'wallpaper') + '.' + ext).replace(/[\\/:*?"<>|]/g, '_');
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+      showMsgToast('已提取：' + a.download);
+    } catch (e) { showMsgToast('提取失败：' + e.message); }
+  });
+  wpMenuUploadBtn.addEventListener('click', async () => {
+    if (!loggedIn) { showMsgToast('请先登录后再查看我的上传'); return; }
+    wpUserGrid.hidden = !wpUserGrid.hidden;
+    wpMenuUploadBtn.textContent = wpUserGrid.hidden ? '🖼️ 我的上传' : '🖼️ 隐藏我的上传';
+    if (!wpUserGrid.hidden && !customWPs.length) await loadCustomWPs();
+  });
+  // 进入外观窗口时（首次）异步拉一次；isAdminRole/UI 变化时 refreshWpUI
+  // 暴露给 setUserUI 钩子：登入登出后 UI 状态由 setUserUI 内部刷新
+  window.__lunaRefreshWallpaper = () => { refreshWpUI(); if (!wpUserGrid.hidden) loadCustomWPs(); };
+  // 渲染内建壁纸（一次性）
   WALLPAPERS.forEach(wp => {
     const el = document.createElement('div');
-    el.className = 'wp'; el.dataset.id = wp.id;
+    el.className = 'wp'; el.dataset.id = wp.id; el.title = wp.name;
     el.style.background = wp.value;
     el.innerHTML = '<span>' + wp.name + '</span>';
     el.addEventListener('click', () => applyWallpaper(wp));

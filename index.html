@@ -291,7 +291,15 @@
       <div class="theme-grid" id="themeGrid"></div>
 
       <div class="sec-title">桌面背景</div>
+      <div class="wp-toolbar">
+        <button id="wpUpload" type="button" class="wp-tb-btn">📤 上传壁纸</button>
+        <button id="wpExtract" type="button" class="wp-tb-btn">📥 提取当前壁纸</button>
+        <button id="wpMenuUpload" type="button" class="wp-tb-btn">🖼️ 我的上传</button>
+        <input id="wpFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" hidden />
+        <span class="wp-tip" id="wpTip">登录后可上传自己的壁纸，管理员可删除上传项</span>
+      </div>
       <div class="appear-grid" id="wpGrid"></div>
+      <div class="appear-grid user-grid" id="wpUserGrid" style="display:none"></div>
 
       <div class="sec-title">字体大小</div>
       <div class="fs-row" id="fsRow">

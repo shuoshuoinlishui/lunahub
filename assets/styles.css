@@ -325,6 +325,32 @@ body[data-fs="xl"] { --fs: 15px; --fs-title: 17px; --fs-big: 20px; }
 .wp:hover { border-color: #9cc4ff; }
 .wp.sel { border-color: #245edb; }
 .wp span { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); color: #fff; font-size: 10px; text-align: center; padding: 2px 0; }
+.wp-custom { box-shadow: inset 0 0 0 2px #5b9bdc, inset 0 0 0 3px rgba(255,255,255,.6); }
+.wp-custom span { background: rgba(36,94,219,.78); }
+.wp-del {
+  position: absolute; top: 3px; right: 3px;
+  width: 18px; height: 18px;
+  border: 1px solid #888; border-radius: 3px;
+  background: linear-gradient(180deg, #fff, #d8d4c2);
+  color: #c00; font-size: 11px; line-height: 1; font-weight: bold;
+  cursor: pointer; padding: 0;
+  opacity: 0; transition: opacity .12s ease;
+}
+.wp:hover .wp-del { opacity: 1; }
+.wp-del:hover { background: linear-gradient(180deg, #ffe6e6, #f0c0c0); color: #900; }
+.wp-empty { padding: 14px; font-size: 11px; color: #888; text-align: center; border: 1px dashed #b8b4a4; border-radius: 5px; background: #f6f4ea; grid-column: 1 / -1; }
+.wp-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; }
+.wp-tb-btn {
+  border: 1px solid #707070; border-radius: 3px;
+  background: linear-gradient(180deg, #fff, #d8d4c2);
+  padding: 4px 10px; font-size: 11px; cursor: pointer;
+  color: #000; box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), 1px 1px 0 rgba(0,0,0,.05);
+}
+.wp-tb-btn:hover:not(:disabled) { background: linear-gradient(180deg, #fff8d0, #e8e0a0); border-color: #e0a000; }
+.wp-tb-btn:active:not(:disabled) { background: linear-gradient(180deg, #d4cc8a, #b8b070); }
+.wp-tb-btn:disabled { color: #999; cursor: not-allowed; opacity: .7; }
+.wp-tip { margin-left: auto; color: #666; font-size: 10px; }
+.appear-grid + .user-grid { margin-top: 6px; }
 .sec-title { font-weight: bold; color: #0a3f8f; margin: 12px 0 6px; border-bottom: 1px solid #cfd6e6; padding-bottom: 3px; }
 .sec-title small { color: #888; font-weight: normal; margin-left: 6px; }
 .accent-row { display: flex; gap: 8px; flex-wrap: wrap; }
