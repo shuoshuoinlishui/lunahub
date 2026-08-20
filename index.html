@@ -269,12 +269,12 @@
       <span class="title">外观和个性化</span>
       <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
     </div>
-    <div class="menubar"><span>桌面</span><span>主题</span><span>窗口颜色</span><span>字体</span></div>
+    <div class="menubar" id="appMenubar"><span class="mb-item" data-scroll="sec-theme">桌面</span><span class="mb-item" data-scroll="sec-theme">主题</span><span class="mb-item" data-scroll="sec-winColor">窗口颜色</span><span class="mb-item" data-scroll="sec-font">字体</span></div>
     <div class="winbody">
-      <div class="sec-title">🎁 一键主题 <small>点一下就把壁纸 · 标题栏 · 任务栏色 · 字体都换掉</small></div>
+      <div class="sec-title" id="sec-theme">🎁 一键主题 <small>点一下就把壁纸 · 标题栏 · 任务栏色 · 字体都换掉</small></div>
       <div class="theme-grid" id="themeGrid"></div>
 
-      <div class="sec-title">桌面背景</div>
+      <div class="sec-title" id="sec-desktop">桌面背景</div>
       <div class="wp-toolbar">
         <button id="wpUpload" type="button" class="wp-tb-btn">📤 上传壁纸</button>
         <button id="wpExtract" type="button" class="wp-tb-btn">📥 提取当前壁纸</button>
@@ -285,7 +285,7 @@
       <div class="appear-grid" id="wpGrid"></div>
       <div class="appear-grid user-grid" id="wpUserGrid" style="display:none"></div>
 
-      <div class="sec-title">字体大小</div>
+      <div class="sec-title" id="sec-font">字体大小</div>
       <div class="fs-row" id="fsRow">
         <small>文字</small>
         <button class="fs-btn" data-fs="sm">小</button>
@@ -295,8 +295,20 @@
         <span class="fs-sample" id="fsSample">Lunahub · 复古计算</span>
       </div>
 
-      <div class="sec-title">窗口颜色（标题栏 / 任务栏）</div>
+      <div class="sec-title" id="sec-winColor">窗口颜色（标题栏 / 任务栏）</div>
       <div class="accent-row" id="accentGrid"></div>
+      <div class="wincolor-custom">
+        <div class="wcc-preview" id="wccPreview">
+          <div class="wcc-titlebar"><span class="wcc-ico">🎨</span><span class="wcc-tt">预览窗口</span><span class="wcc-btns"><span class="wcc-wb">▢</span><span class="wcc-wb">✕</span></span></div>
+          <div class="wcc-body">这是标题栏与任务栏的颜色预览效果。<br>选择上方预设色块，或用下方拾色器自定义渐变。</div>
+        </div>
+        <div class="wcc-pickers">
+          <label class="wcc-label">渐变起始 <input type="color" id="wccC1" value="#3c7fb1"></label>
+          <label class="wcc-label">渐变结束 <input type="color" id="wccC2" value="#245edb"></label>
+          <button class="xp-btn small primary" id="wccApply" type="button">应用自定义</button>
+          <button class="xp-btn small" id="wccReset" type="button">恢复默认蓝</button>
+        </div>
+      </div>
     </div>
   </section>
 

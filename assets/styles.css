@@ -414,6 +414,21 @@ body[data-fs="xl"] { --fs: 15px; --fs-title: 17px; --fs-big: 20px; }
 .accent { width: 30px; height: 24px; border-radius: 5px; cursor: pointer; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,.3); }
 .accent.sel { border-color: #fff; box-shadow: 0 0 0 2px #245edb; }
 
+/* 自定义窗口颜色拾取器 */
+.wincolor-custom { margin-top: 12px; display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; border: 1px solid #d4d0c8; border-radius: 5px; padding: 12px; background: linear-gradient(#f8f6ef,#ece9d8); }
+.wcc-preview { width: 200px; flex: none; border: 1px solid #888; border-radius: 5px 5px 0 0; overflow: hidden; box-shadow: 2px 2px 6px rgba(0,0,0,.2); }
+.wcc-titlebar { display: flex; align-items: center; gap: 5px; padding: 4px 8px; background: linear-gradient(180deg,var(--acc1),var(--acc2)); color: #fff; font-size: 12px; }
+.wcc-titlebar .wcc-ico { font-size: 13px; }
+.wcc-titlebar .wcc-tt { flex: 1; font-weight: bold; text-shadow: 1px 1px 1px rgba(0,0,0,.4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wcc-titlebar .wcc-btns { display: flex; gap: 4px; }
+.wcc-titlebar .wcc-wb { width: 16px; height: 14px; line-height: 12px; text-align: center; background: linear-gradient(#fff,#d8d4c6); border: 1px solid #888; border-radius: 2px; color: #000; font-size: 10px; cursor: default; }
+.wcc-body { padding: 10px; background: #fff; font-size: 12px; color: #333; line-height: 1.5; }
+.wcc-pickers { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 10px; }
+.wcc-label { display: flex; align-items: center; gap: 8px; font-size: var(--fs); color: #333; }
+.wcc-label input[type="color"] { width: 42px; height: 26px; padding: 0; border: 1px solid #888; border-radius: 3px; background: #fff; cursor: pointer; }
+.wcc-label input[type="color"]::-webkit-color-swatch-wrapper { padding: 1px; }
+.wcc-label input[type="color"]::-webkit-color-swatch { border: 1px solid #999; border-radius: 2px; }
+
 /* ===== 控制面板 ===== */
 .control-body { padding: 12px; }
 .control-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }

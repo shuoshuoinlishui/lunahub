@@ -1196,6 +1196,59 @@
     el.addEventListener('click', () => applyAccent(a));
     accentGrid.appendChild(el);
   });
+
+  /* —— 自定义窗口颜色拾取器 —— */
+  const wccC1 = document.getElementById('wccC1');
+  const wccC2 = document.getElementById('wccC2');
+  const wccApply = document.getElementById('wccApply');
+  const wccReset = document.getElementById('wccReset');
+  const wccPreview = document.getElementById('wccPreview');
+  function wccPreviewUpdate() {
+    if (!wccPreview) return;
+    wccPreview.querySelector('.wcc-titlebar').style.background =
+      'linear-gradient(180deg,' + (wccC1.value) + ',' + (wccC2.value) + ')';
+  }
+  function applyCustomAccent(c1, c2) {
+    document.documentElement.style.setProperty('--acc1', c1);
+    document.documentElement.style.setProperty('--acc2', c2);
+    try { localStorage.setItem('lunahub_accent_custom', JSON.stringify({ c1, c2 })); } catch (e) {}
+    document.querySelectorAll('#accentGrid .accent').forEach(el => el.classList.remove('sel'));
+    document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
+    if (wccC1) wccC1.value = c1;
+    if (wccC2) wccC2.value = c2;
+    wccPreviewUpdate();
+  }
+  if (wccC1) wccC1.addEventListener('input', wccPreviewUpdate);
+  if (wccC2) wccC2.addEventListener('input', wccPreviewUpdate);
+  if (wccApply) wccApply.addEventListener('click', () => {
+    applyCustomAccent(wccC1.value, wccC2.value);
+    showMsgToast('已应用自定义窗口颜色');
+  });
+  if (wccReset) wccReset.addEventListener('click', () => {
+    try { localStorage.removeItem('lunahub_accent_custom'); } catch (e) {}
+    applyAccent(ACCENTS[0]);
+    if (wccC1) wccC1.value = ACCENTS[0].c1;
+    if (wccC2) wccC2.value = ACCENTS[0].c2;
+    wccPreviewUpdate();
+    showMsgToast('已恢复默认蓝色');
+  });
+  // 选择预设色块时同步拾色器 + 清除自定义记录
+  const _applyAccentOrig = applyAccent;
+  applyAccent = function(a) {
+    _applyAccentOrig(a);
+    try { localStorage.removeItem('lunahub_accent_custom'); } catch (e) {}
+    if (wccC1) wccC1.value = a.c1;
+    if (wccC2) wccC2.value = a.c2;
+    wccPreviewUpdate();
+  };
+
+  /* —— 外观窗口 menubar 导航（滚动到分区） —— */
+  document.querySelectorAll('#appMenubar .mb-item').forEach(s => {
+    s.addEventListener('click', () => {
+      const target = document.getElementById(s.dataset.scroll);
+      if (target && target.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
   // 主题预设卡片
   const themeGrid = document.getElementById('themeGrid');
   THEMES.forEach(t => {
@@ -1218,18 +1271,23 @@
     btn.addEventListener('click', () => applyFontSize(btn.dataset.fs));
   });
 
-  // 恢复上次的偏好（主题优先 > 分项 > 默认）
-  let savedWp = null, savedAc = null, savedFs = null, savedTheme = null;
+  // 恢复上次的偏好（主题优先 > 自定义颜色 > 预设 > 默认）
+  let savedWp = null, savedAc = null, savedFs = null, savedTheme = null, savedCustom = null;
   try {
     savedWp = localStorage.getItem('lunahub_wp');
     savedAc = localStorage.getItem('lunahub_accent');
     savedFs = localStorage.getItem('lunahub_fs');
     savedTheme = localStorage.getItem('lunahub_theme');
+    savedCustom = localStorage.getItem('lunahub_accent_custom');
   } catch (e) {}
   applyWallpaper(WALLPAPERS.find(w => w.id === savedWp) || WALLPAPERS[0]);
-  applyAccent(ACCENTS.find(a => a.id === savedAc) || ACCENTS[0]);
+  if (savedCustom) {
+    try { const c = JSON.parse(savedCustom); applyCustomAccent(c.c1, c.c2); } catch (e) { applyAccent(ACCENTS.find(a => a.id === savedAc) || ACCENTS[0]); }
+  } else {
+    applyAccent(ACCENTS.find(a => a.id === savedAc) || ACCENTS[0]);
+  }
   applyFontSize(savedFs || 'md');
-  if (savedTheme) {
+  if (savedTheme && !savedCustom) {
     const t = THEMES.find(x => x.id === savedTheme);
     if (t) {
       // 选中状态高亮 + 恢复主题 class（如经典主题）
