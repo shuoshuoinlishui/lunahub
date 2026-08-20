@@ -17,6 +17,7 @@
     <button class="dico" data-app="notepad"><span class="di-ico">📝</span><span class="di-txt">记事本</span></button>
     <button class="dico" data-app="mines"><span class="di-ico">💣</span><span class="di-txt">扫雷</span></button>
     <button class="dico" data-app="music"><span class="di-ico">🎵</span><span class="di-txt">Luna媒体播放器</span></button>
+    <button class="dico" data-app="photos"><span class="di-ico">📷</span><span class="di-txt">Luna照片查看器</span></button>
     <button class="dico" data-app="forums"><span class="di-ico">📂</span><span class="di-txt">论坛分区</span></button>
     <button class="dico" data-app="gallery"><span class="di-ico">🖼️</span><span class="di-txt">画廊精选</span></button>
     <button class="dico" data-app="donate"><span class="di-ico">💝</span><span class="di-txt">捐赠支持</span></button>
@@ -461,6 +462,45 @@
     </div>
   </section>
 
+  <!-- Luna照片查看器 -->
+  <section class="window" id="photos" data-title="Luna照片查看器" data-icon="📷" style="width:660px;height:500px">
+    <div class="titlebar">
+      <span class="ico">📷</span>
+      <span class="title" id="phWinTitle">Luna照片查看器</span>
+      <span class="winbtns"><button class="wb min" title="最小化">_</button><button class="wb max" title="最大化">▢</button><button class="wb close" title="关闭">✕</button></span>
+    </div>
+    <div class="winbody photo-body">
+      <div class="pv-stage" id="phStage">
+        <img id="phImg" alt="" draggable="false">
+        <div class="pv-empty" id="phEmpty">没有显示图片。<br>「打开」浏览本地图片，「示例图片」查看预置壁纸。</div>
+      </div>
+      <div class="pv-bar">
+        <button class="pv-btn" id="phOpen" type="button" title="打开本地图片（可多选）">📂</button>
+        <button class="pv-btn" id="phSample" type="button" title="示例图片（预置壁纸集）">🖼️</button>
+        <span class="pv-sep"></span>
+        <button class="pv-btn" id="phPrev" type="button" title="上一张">◀</button>
+        <button class="pv-btn" id="phNext" type="button" title="下一张">▶</button>
+        <span class="pv-sep"></span>
+        <button class="pv-btn" id="phFit" type="button" title="最佳大小（适应窗口）">⤢</button>
+        <button class="pv-btn" id="phFull" type="button" title="实际大小（100%）">1:1</button>
+        <button class="pv-btn" id="phZoomOut" type="button" title="缩小">➖</button>
+        <button class="pv-btn" id="phZoomIn" type="button" title="放大">➕</button>
+        <span class="pv-sep"></span>
+        <button class="pv-btn" id="phRotL" type="button" title="向左旋转 90°">↺</button>
+        <button class="pv-btn" id="phRotR" type="button" title="向右旋转 90°">↻</button>
+        <span class="pv-sep"></span>
+        <button class="pv-btn" id="phSlide" type="button" title="幻灯片放映（每 3 秒切换）">⏵</button>
+      </div>
+      <div class="pv-status">
+        <span id="phName">未打开图片</span>
+        <span id="phDim"></span>
+        <span id="phZoomInfo"></span>
+        <span id="phCount"></span>
+      </div>
+      <input type="file" id="phFile" hidden accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" multiple>
+    </div>
+  </section>
+
   <!-- 开始菜单 -->
   <div class="startmenu" id="startMenu" hidden>
     <button class="sm-head" id="accountBtn" type="button">
@@ -474,6 +514,7 @@
         <a href="#" data-open="notepad">📝 记事本</a>
         <a href="#" data-open="mines">💣 扫雷</a>
         <a href="#" data-open="music">🎵 Luna媒体播放器</a>
+        <a href="#" data-open="photos">📷 Luna照片查看器</a>
         <a href="#" data-open="forums">📂 论坛分区</a>
         <a href="#" data-open="gallery">🖼️ 画廊精选</a>
         <a href="#" data-open="chat">🗨️ 在线聊天</a>

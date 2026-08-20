@@ -692,3 +692,24 @@ body.theme-classic .desktop { background: #3a6ea5 !important; }
 .ie-open-ext { display: inline-block; padding: 5px 16px; border: 1px solid #245edb; border-radius: 4px; background: linear-gradient(180deg, #5b9bdc, #245edb); color: #fff; text-decoration: none; font-size: 12px; }
 .ie-open-ext:hover { filter: brightness(1.1); }
 .ie-statusbar { display: flex; justify-content: space-between; padding: 2px 8px; background: #ece9d8; border-top: 1px solid #aca899; font-size: 11px; color: #555; flex: none; }
+
+/* ===== Luna照片查看器（仿 Windows 图片和传真查看器） ===== */
+.photo-body { display: flex; flex-direction: column; gap: 0; padding: 0; background: #ece9d8; overflow: hidden; }
+.pv-stage { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center;
+  background: repeating-conic-gradient(#e8e8e8 0% 25%, #f5f5f5 0% 50%) 0 0 / 24px 24px; border: 1px solid #919b9c; overflow: hidden; }
+.pv-stage img { max-width: none; max-height: none; user-select: none; -webkit-user-drag: none; touch-action: none;
+  box-shadow: 0 2px 10px rgba(0,0,0,.35); background: #fff; }
+.pv-stage img:not([src]) { display: none; }
+.pv-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+  color: #6a737b; font-size: 12px; line-height: 2; }
+.pv-bar { flex: none; display: flex; align-items: center; justify-content: center; gap: 3px; padding: 5px 8px;
+  background: linear-gradient(180deg, #f6f5ec, #e3e0d2); border-top: 1px solid #aca899; }
+.pv-btn { min-width: 26px; height: 24px; padding: 0 7px; font-size: 12px; line-height: 1; border: 1px solid #aca899; border-radius: 3px;
+  background: linear-gradient(180deg, #fff, #e3e0d2); color: #333; cursor: pointer; }
+.pv-btn:hover { background: linear-gradient(180deg, #fff8d0, #e8e0a0); border-color: #c8a000; }
+.pv-btn:active { background: linear-gradient(180deg, #d8d4c0, #e8e4d0); box-shadow: inset 1px 1px 2px rgba(0,0,0,.15); }
+.pv-sep { width: 1px; height: 18px; background: #b8b4a4; margin: 0 4px; }
+.pv-status { flex: none; display: flex; align-items: center; gap: 14px; padding: 3px 10px;
+  background: #ece9d8; border-top: 1px solid #aca899; font-size: 11px; color: #555; white-space: nowrap; overflow: hidden; }
+.pv-status span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.pv-status span:not(:first-child) { color: #888; }
