@@ -252,26 +252,54 @@ const TYPES = {
   '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.bmp': 'image/bmp'
+  '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.bmp': 'image/bmp',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4'
 };
 
-function serveStatic(p, res) {
+function serveStatic(p, res, req) {
   let rel = decodeURIComponent(p);
   if (rel === '/' || rel === '') rel = '/index.html';
   let file = path.normalize(path.join(ROOT, rel));
   if (file !== ROOT && !file.startsWith(ROOT + path.sep) && !file.startsWith(ROOT + '/')) {
     res.writeHead(403); return res.end('forbidden');
   }
-  fs.readFile(file, (err, data) => {
-    if (err) { res.writeHead(404); return res.end('not found'); }
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) { res.writeHead(404); return res.end('not found'); }
     const ext = path.extname(file).toLowerCase();
+    const ctype = TYPES[ext] || 'application/octet-stream';
+    // Range 请求支持（音频拖动进度条必需）
+    const range = req && req.headers.range;
+    const m = range && range.match(/^bytes=(\d*)-(\d*)$/);
+    if (m && (m[1] !== '' || m[2] !== '')) {
+      let start = m[1] === '' ? 0 : parseInt(m[1], 10);
+      let end = m[2] === '' ? st.size - 1 : parseInt(m[2], 10);
+      if (m[1] === '' && m[2] !== '') { start = Math.max(0, st.size - parseInt(m[2], 10)); end = st.size - 1; }
+      if (isNaN(start) || isNaN(end) || start > end || start >= st.size) {
+        res.writeHead(416, { 'Content-Range': 'bytes */' + st.size });
+        return res.end();
+      }
+      end = Math.min(end, st.size - 1);
+      res.writeHead(206, {
+        'Content-Type': ctype,
+        'Content-Range': 'bytes ' + start + '-' + end + '/' + st.size,
+        'Content-Length': end - start + 1,
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
+      fs.createReadStream(file, { start, end }).on('error', () => { res.writeHead(500); res.end(); }).pipe(res);
+      return;
+    }
     res.writeHead(200, {
-      'Content-Type': TYPES[ext] || 'application/octet-stream',
+      'Content-Type': ctype,
+      'Content-Length': st.size,
+      'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0'
     });
-    res.end(data);
+    fs.createReadStream(file).on('error', () => { res.writeHead(500); res.end(); }).pipe(res);
   });
 }
 
@@ -707,7 +735,7 @@ const server = http.createServer(async (req, res) => {
   if (p.startsWith('/api/')) return sendJSON(res, 404, { error: 'not found' });
 
   // === 静态文件 ===
-  serveStatic(p, res);
+  serveStatic(p, res, req);
 });
 
 server.listen(PORT, () => {

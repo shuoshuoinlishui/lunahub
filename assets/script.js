@@ -17,6 +17,9 @@
     donate:  { icon: '💝', title: '捐赠支持' },
     about:   { icon: '📝', title: '关于 Lunahub' },
     browser: { icon: '🌐', title: 'Internet Explorer' },
+    notepad: { icon: '📝', title: '记事本' },
+    mines:   { icon: '💣', title: '扫雷' },
+    music:   { icon: '🎵', title: 'Luna音乐播放器' },
     appearance: { icon: '🎨', title: '外观和个性化' },
     control:    { icon: '🛠️', title: '控制面板' },
     account:    { icon: '👤', title: '用户账户' },
@@ -1467,6 +1470,316 @@
     if (!loggedIn) { openLogin(); return; }
     saveAvatar('');
   });
+
+  /* ---------- 记事本 ---------- */
+  const npText = document.getElementById('npText');
+  const npTitle = document.getElementById('npTitle');
+  const npPos = document.getElementById('npPos');
+  const npCount = document.getElementById('npCount');
+  const NP_SAVE = 'lunahub_notepad';
+
+  if (npText) {
+    try {
+      const saved = localStorage.getItem(NP_SAVE);
+      if (saved) {
+        npText.value = saved.text || '';
+        if (saved.title) npTitle.textContent = saved.title;
+      }
+    } catch (e) {}
+    // 自动保存（输入停止 500ms 后）
+    let npTimer = null;
+    npText.addEventListener('input', () => {
+      updateNpStatus();
+      clearTimeout(npTimer);
+      npTimer = setTimeout(() => {
+        try { localStorage.setItem(NP_SAVE, JSON.stringify({ text: npText.value, title: npTitle.textContent })); } catch (e) {}
+      }, 500);
+    });
+    npText.addEventListener('keyup', updateNpStatus);
+    npText.addEventListener('click', updateNpStatus);
+    function updateNpStatus() {
+      const pos = npText.selectionStart || 0;
+      const before = npText.value.slice(0, pos);
+      const lines = before.split('\n');
+      npPos.textContent = '第 ' + lines.length + ' 行，第 ' + (lines[lines.length - 1].length + 1) + ' 列';
+      npCount.textContent = npText.value.length + ' 个字符';
+    }
+    // 文件菜单：清空
+    const npFileMenu = document.getElementById('npFileMenu');
+    if (npFileMenu) npFileMenu.addEventListener('click', () => {
+      if (confirm('清空当前内容并新建文档吗？（当前内容已自动保存，将丢失）')) {
+        npText.value = '';
+        npTitle.textContent = '无标题 - 记事本';
+        updateNpStatus();
+        try { localStorage.setItem(NP_SAVE, JSON.stringify({ text: '', title: '无标题 - 记事本' })); } catch (e) {}
+      }
+    });
+    // 编辑菜单：全选
+    const npEditMenu = document.getElementById('npEditMenu');
+    if (npEditMenu) npEditMenu.addEventListener('click', () => { npText.focus(); npText.select(); });
+    updateNpStatus();
+  }
+
+  /* ---------- 扫雷 ---------- */
+  const msGrid = document.getElementById('msGrid');
+  const msFace = document.getElementById('msFace');
+  const msMines = document.getElementById('msMines');
+  const msTime = document.getElementById('msTime');
+  const msDiff = document.getElementById('msDiff');
+  const MS_DIFFS = [
+    { key: '初级',   w: 9,  h: 9,  n: 10 },
+    { key: '中级',   w: 16, h: 16, n: 40 },
+    { key: '高级',   w: 30, h: 16, n: 99 }
+  ];
+  const NUM_COLORS = ['', '#0000ff', '#008000', '#ff0000', '#000080', '#800000', '#008080', '#000000', '#808080'];
+  let msW = 9, msH = 9, msN = 10, msDiffIdx = 0;
+  let msBoard = null, msState = 'ready', msTimer = null, msSec = 0, msFlags = 0, msOpened = 0;
+
+  function msLcd(el, v) {
+    v = Math.max(-99, Math.min(999, v));
+    let s = v < 0 ? '-' + String(Math.abs(v)).padStart(2, '0') : String(v).padStart(3, '0');
+    el.textContent = s;
+  }
+  function msNewGame() {
+    clearInterval(msTimer); msTimer = null;
+    msSec = 0; msFlags = 0; msOpened = 0; msState = 'ready';
+    msLcd(msTime, 0); msLcd(msMines, msN);
+    msFace.textContent = '🙂';
+    msGrid.innerHTML = '';
+    msGrid.style.gridTemplateColumns = 'repeat(' + msW + ', 20px)';
+    msBoard = [];
+    for (let r = 0; r < msH; r++) {
+      const row = [];
+      for (let c = 0; c < msW; c++) {
+        const cell = document.createElement('button');
+        cell.className = 'ms-c';
+        cell.type = 'button';
+        cell.dataset.r = r; cell.dataset.c = c;
+        msGrid.appendChild(cell);
+        row.push({ el: cell, mine: false, open: false, flag: 0, near: 0 });
+      }
+      msBoard.push(row);
+    }
+  }
+  function msNeighbors(r, c) {
+    const out = [];
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < msH && nc >= 0 && nc < msW) out.push([nr, nc]);
+    }
+    return out;
+  }
+  function msPlant(safeR, safeC) {
+    let placed = 0;
+    const forbidden = new Set([safeR + ',' + safeC].concat(msNeighbors(safeR, safeC).map(x => x[0] + ',' + x[1])));
+    while (placed < msN) {
+      const r = Math.floor(Math.random() * msH), c = Math.floor(Math.random() * msW);
+      if (msBoard[r][c].mine || forbidden.has(r + ',' + c)) continue;
+      msBoard[r][c].mine = true; placed++;
+    }
+    for (let r = 0; r < msH; r++) for (let c = 0; c < msW; c++)
+      msBoard[r][c].near = msNeighbors(r, c).filter(x => msBoard[x[0]][x[1]].mine).length;
+  }
+  function msStartTimer() {
+    msTimer = setInterval(() => { msSec++; msLcd(msTime, msSec); if (msSec >= 999) clearInterval(msTimer); }, 1000);
+  }
+  function msOpenCell(r, c) {
+    const cell = msBoard[r][c];
+    if (msState === 'lost' || msState === 'won') return;
+    if (cell.open || cell.flag === 1) return;
+    if (msState === 'ready') { msPlant(r, c); msState = 'playing'; msStartTimer(); }
+    if (cell.mine) return msExplode(r, c);
+    const stack = [[r, c]];
+    while (stack.length) {
+      const [cr, cc] = stack.pop();
+      const cur = msBoard[cr][cc];
+      if (cur.open || cur.flag === 1 || cur.mine) continue;
+      cur.open = true; msOpened++;
+      cur.el.classList.add('open');
+      if (cur.near) {
+        cur.el.textContent = cur.near;
+        cur.el.style.color = NUM_COLORS[cur.near];
+      }
+      if (cur.near === 0) msNeighbors(cr, cc).forEach(x => { if (!msBoard[x[0]][x[1]].open) stack.push(x); });
+    }
+    if (msOpened === msW * msH - msN) msWin();
+  }
+  function msExplode(r, c) {
+    msState = 'lost';
+    clearInterval(msTimer);
+    msFace.textContent = '😵';
+    for (let rr = 0; rr < msH; rr++) for (let cc = 0; cc < msW; cc++) {
+      const cell = msBoard[rr][cc];
+      if (cell.mine && cell.flag !== 1) { cell.el.classList.add('open', 'boom'); cell.el.textContent = '💣'; }
+      if (!cell.mine && cell.flag === 1) { cell.el.classList.add('wrong'); cell.el.textContent = '❌'; }
+    }
+    msBoard[r][c].el.classList.add('hit');
+    showMsgToast('💥 踩雷了！点击笑脸重新开始');
+  }
+  function msWin() {
+    msState = 'won';
+    clearInterval(msTimer);
+    msFace.textContent = '😎';
+    for (let r = 0; r < msH; r++) for (let c = 0; c < msW; c++) {
+      const cell = msBoard[r][c];
+      if (cell.mine && cell.flag !== 1) { cell.flag = 1; cell.el.textContent = '🚩'; msFlags++; }
+    }
+    msLcd(msMines, 0);
+    showMsgToast('🎉 扫雷成功！用时 ' + msSec + ' 秒');
+  }
+  if (msGrid) {
+    msGrid.addEventListener('mousedown', e => {
+      if (msState === 'playing' || msState === 'ready') {
+        if (e.button === 0 && !e.target.classList.contains('open')) msFace.textContent = '😮';
+      }
+    });
+    msGrid.addEventListener('mouseup', () => { if (msState === 'playing' || msState === 'ready') msFace.textContent = '🙂'; });
+    msGrid.addEventListener('click', e => {
+      const t = e.target.closest('.ms-c');
+      if (!t) return;
+      msOpenCell(parseInt(t.dataset.r, 10), parseInt(t.dataset.c, 10));
+    });
+    msGrid.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      const t = e.target.closest('.ms-c');
+      if (!t || msState === 'lost' || msState === 'won') return;
+      const cell = msBoard[t.dataset.r][t.dataset.c];
+      if (cell.open) return;
+      cell.flag = (cell.flag + 1) % 3;
+      cell.el.textContent = cell.flag === 1 ? '🚩' : cell.flag === 2 ? '❓' : '';
+      msFlags += cell.flag === 1 ? 1 : cell.flag === 2 ? -1 : 0;
+      msLcd(msMines, msN - msFlags);
+    });
+    msGrid.addEventListener('dblclick', e => {
+      const t = e.target.closest('.ms-c');
+      if (!t) return;
+      const r = parseInt(t.dataset.r, 10), c = parseInt(t.dataset.c, 10);
+      const cell = msBoard[r][c];
+      if (!cell.open || !cell.near || msState !== 'playing') return;
+      const near = msNeighbors(r, c);
+      const flagged = near.filter(x => msBoard[x[0]][x[1]].flag === 1).length;
+      if (flagged === cell.near) near.forEach(x => msOpenCell(x[0], x[1]));
+    });
+    if (msFace) msFace.addEventListener('click', msNewGame);
+    const msGameMenu = document.getElementById('msGameMenu');
+    if (msGameMenu) msGameMenu.addEventListener('click', () => {
+      const names = MS_DIFFS.map(d => d.key + '（' + d.w + '×' + d.h + '，' + d.n + ' 雷）').join('\n');
+      const pick = prompt('选择难度，输入数字：\n1. 初级（9×9，10 雷）\n2. 中级（16×16，40 雷）\n3. 高级（30×16，99 雷）\n\n当前：' + names.split('\n')[msDiffIdx], String(msDiffIdx + 1));
+      if (!pick) return;
+      const i = parseInt(pick, 10) - 1;
+      if (i >= 0 && i < MS_DIFFS.length && i !== msDiffIdx) {
+        const d = MS_DIFFS[i];
+        msDiffIdx = i; msW = d.w; msH = d.h; msN = d.n;
+        msDiff.textContent = '难度：' + d.key + '（' + d.w + '×' + d.h + '，' + d.n + ' 雷）';
+        const win = document.getElementById('mines');
+        win.style.width = Math.min(Math.max(d.w * 20 + 70, 230), 760) + 'px';
+        win.style.height = '';
+        msNewGame();
+      }
+    });
+    msNewGame();
+  }
+
+  /* ---------- Luna音乐播放器 ---------- */
+  const MU_TRACKS = [
+    { name: 'Velkommen (Original Mix)', artist: 'Stan LePard', src: '/assets/music/velkommen.mp3' },
+    { name: 'Flourish', artist: 'Microsoft Samples', src: '/assets/music/flourish.mp3' },
+    { name: 'Onestop', artist: 'Microsoft Samples', src: '/assets/music/onestop.mp3' },
+    { name: 'Town', artist: 'Microsoft Samples', src: '/assets/music/town.mp3' },
+    { name: '黄昏', artist: '周传雄', src: '/assets/music/黄昏-周传雄.mp3' },
+    { name: '十年', artist: '陈奕迅', src: '/assets/music/十年-陈奕迅.mp3' }
+  ];
+  const muAudio = document.getElementById('muAudio');
+  const muList = document.getElementById('muList');
+  const muName = document.getElementById('muName');
+  const muArtist = document.getElementById('muArtist');
+  const muPlay = document.getElementById('muPlay');
+  const muPrev = document.getElementById('muPrev');
+  const muNext = document.getElementById('muNext');
+  const muMode = document.getElementById('muMode');
+  const muSeek = document.getElementById('muSeek');
+  const muVol = document.getElementById('muVol');
+  const muCur = document.getElementById('muCur');
+  const muDur = document.getElementById('muDur');
+  const muDisc = document.getElementById('muDisc');
+  const muWinTitle = document.getElementById('muTitle');
+  let muIdx = -1, muModes = ['list', 'one', 'shuffle'], muModeIdx = 0, muSeeking = false;
+
+  function muFmt(s) {
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60), ss = Math.floor(s % 60);
+    return String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+  }
+  function muRenderList() {
+    if (!muList) return;
+    muList.innerHTML = '';
+    MU_TRACKS.forEach((t, i) => {
+      const li = document.createElement('button');
+      li.type = 'button';
+      li.className = 'mu-item' + (i === muIdx ? ' active' : '');
+      li.innerHTML = '<span class="mu-item-idx">' + (i === muIdx && !muAudio.paused ? '▶' : String(i + 1)) + '</span>' +
+        '<span class="mu-item-name">' + esc(t.name) + '</span>' +
+        '<span class="mu-item-artist">' + esc(t.artist) + '</span>';
+      li.addEventListener('click', () => muPlayIdx(i));
+      muList.appendChild(li);
+    });
+  }
+  function muSafePlay(a) {
+    try { const p = a.play(); if (p && typeof p.catch === 'function') p.catch(function() {}); } catch (e) {}
+  }
+  function muPlayIdx(i, autoplay) {
+    muIdx = (i + MU_TRACKS.length) % MU_TRACKS.length;
+    const t = MU_TRACKS[muIdx];
+    muAudio.src = t.src;
+    muName.textContent = t.name;
+    muArtist.textContent = t.artist;
+    muWinTitle.textContent = t.name + ' - Luna音乐播放器';
+    if (autoplay !== false) muSafePlay(muAudio);
+    muRenderList();
+  }
+  if (muAudio) {
+    muAudio.volume = 0.8;
+    muAudio.addEventListener('play', () => { muPlay.textContent = '⏸'; muDisc.classList.add('spin'); muRenderList(); });
+    muAudio.addEventListener('pause', () => { muPlay.textContent = '▶'; muDisc.classList.remove('spin'); muRenderList(); });
+    muAudio.addEventListener('loadedmetadata', () => { muDur.textContent = muFmt(muAudio.duration); });
+    muAudio.addEventListener('timeupdate', () => {
+      muCur.textContent = muFmt(muAudio.currentTime);
+      if (!muSeeking && muAudio.duration) muSeek.value = Math.round(muAudio.currentTime / muAudio.duration * 1000);
+    });
+    muAudio.addEventListener('ended', () => {
+      const mode = muModes[muModeIdx];
+      if (mode === 'one') { muAudio.currentTime = 0; muSafePlay(muAudio); }
+      else if (mode === 'shuffle') { let n; do { n = Math.floor(Math.random() * MU_TRACKS.length); } while (n === muIdx && MU_TRACKS.length > 1); muPlayIdx(n); }
+      else if (muIdx === MU_TRACKS.length - 1) muPlayIdx(0);
+      else muPlayIdx(muIdx + 1);
+    });
+    muAudio.addEventListener('error', () => {
+      if (muIdx >= 0) showMsgToast('无法播放：' + MU_TRACKS[muIdx].name + '（文件缺失或格式不支持）');
+    });
+    muPlay.addEventListener('click', () => {
+      if (muIdx < 0) { muPlayIdx(0); return; }
+      if (muAudio.paused) muSafePlay(muAudio); else muAudio.pause();
+    });
+    muPrev.addEventListener('click', () => {
+      if (muAudio.currentTime > 3) { muAudio.currentTime = 0; return; }
+      muPlayIdx(muIdx < 0 ? 0 : muIdx - 1);
+    });
+    muNext.addEventListener('click', () => muPlayIdx(muIdx < 0 ? 0 : muIdx + 1));
+    muMode.addEventListener('click', () => {
+      muModeIdx = (muModeIdx + 1) % muModes.length;
+      muMode.textContent = { list: '🔁', one: '🔂', shuffle: '🔀' }[muModes[muModeIdx]];
+      muMode.title = { list: '列表循环', one: '单曲循环', shuffle: '随机播放' }[muModes[muModeIdx]];
+      showMsgToast('播放模式：' + { list: '列表循环', one: '单曲循环', shuffle: '随机播放' }[muModes[muModeIdx]]);
+    });
+    muSeek.addEventListener('input', () => { muSeeking = true; });
+    muSeek.addEventListener('change', () => {
+      if (muAudio.duration) muAudio.currentTime = muSeek.value / 1000 * muAudio.duration;
+      muSeeking = false;
+    });
+    muVol.addEventListener('input', () => { muAudio.volume = muVol.value / 100; });
+    muRenderList();
+  }
 
   // 打开窗口时自动初始化对应内容
   const _openOrig = WM.open.bind(WM);
