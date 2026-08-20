@@ -25,3 +25,5 @@ node server.js
 - 前端：原生 HTML/CSS/JS（零框架）
 - 后端：Node.js（零依赖，仅用 http/crypto/fs）
 - 数据：JSON 文件持久化（data/users.json + data/forum.json）
+
+ai制作
