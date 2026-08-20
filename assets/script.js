@@ -19,7 +19,7 @@
     browser: { icon: '🌐', title: 'Internet Explorer' },
     notepad: { icon: '📝', title: '记事本' },
     mines:   { icon: '💣', title: '扫雷' },
-    music:   { icon: '🎵', title: 'Luna音乐播放器' },
+    music:   { icon: '🎵', title: 'Luna媒体播放器' },
     appearance: { icon: '🎨', title: '外观和个性化' },
     control:    { icon: '🛠️', title: '控制面板' },
     account:    { icon: '👤', title: '用户账户' },
@@ -305,6 +305,7 @@
     trayLogin.title = '已登录：' + u;
     updateAuthUI();
     if (typeof window.__lunaRefreshWallpaper === 'function') window.__lunaRefreshWallpaper();
+    if (typeof muRefreshAdminUI === 'function') muRefreshAdminUI();
   }
   function renderAvatar(el, name, url) {
     if (!el) return;
@@ -1845,15 +1846,7 @@
     msNewGame();
   }
 
-  /* ---------- Luna音乐播放器 ---------- */
-  const MU_TRACKS = [
-    { name: 'Velkommen (Original Mix)', artist: 'Stan LePard', src: '/assets/music/velkommen.mp3' },
-    { name: 'Flourish', artist: 'Microsoft Samples', src: '/assets/music/flourish.mp3' },
-    { name: 'Onestop', artist: 'Microsoft Samples', src: '/assets/music/onestop.mp3' },
-    { name: 'Town', artist: 'Microsoft Samples', src: '/assets/music/town.mp3' },
-    { name: '黄昏', artist: '周传雄', src: '/assets/music/黄昏-周传雄.mp3' },
-    { name: '十年', artist: '陈奕迅', src: '/assets/music/十年-陈奕迅.mp3' }
-  ];
+  /* ---------- Luna媒体播放器（音乐 + 视频） ---------- */
   const muAudio = document.getElementById('muAudio');
   const muList = document.getElementById('muList');
   const muName = document.getElementById('muName');
@@ -1868,39 +1861,196 @@
   const muDur = document.getElementById('muDur');
   const muDisc = document.getElementById('muDisc');
   const muWinTitle = document.getElementById('muTitle');
-  let muIdx = -1, muModes = ['list', 'one', 'shuffle'], muModeIdx = 0, muSeeking = false;
+  const muTabMusic = document.getElementById('muTabMusic');
+  const muTabVideo = document.getElementById('muTabVideo');
+  const muPaneMusic = document.getElementById('muPaneMusic');
+  const muPaneVideo = document.getElementById('muPaneVideo');
+  const muVideo = document.getElementById('muVideo');
+  const muVideoList = document.getElementById('muVideoList');
+  const muVideoName = document.getElementById('muVideoName');
+  const muAdminBar = document.getElementById('muAdminBar');
+  const muAdd = document.getElementById('muAdd');
+  const muFile = document.getElementById('muFile');
+  let MU_ITEMS = [];    // 音乐条目（管理员可见已隐藏项）
+  let MU_VIDEOS = [];   // 视频条目
+  let muIdx = -1, muModes = ['list', 'one', 'shuffle'], muModeIdx = 0, muSeeking = false, muCurId = null, muMediaLoaded = false;
 
   function muFmt(s) {
     if (!isFinite(s) || s < 0) s = 0;
     const m = Math.floor(s / 60), ss = Math.floor(s % 60);
     return String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
   }
+  function muSrc(it) { return '/assets/' + it.file; }
+  function muEmpty(container, txt) {
+    const d = document.createElement('div');
+    d.className = 'mu-empty';
+    d.textContent = txt;
+    container.appendChild(d);
+  }
+  function muOpBtn(cls, title, txt, onClick) {
+    const b = document.createElement('span');
+    b.className = 'mu-op ' + cls; b.title = title; b.textContent = txt;
+    b.addEventListener('click', function (ev) { ev.stopPropagation(); onClick(); });
+    return b;
+  }
+  async function muToggleHidden(it) {
+    try {
+      await api('POST', '/api/admin/media/' + it.id + '/hide', { hidden: !it.hidden });
+      showMsgToast(it.hidden ? '已显示：' + it.name : '已隐藏：' + it.name);
+      await loadMedia(true);
+    } catch (e) { showMsgToast('操作失败：' + e.message); }
+  }
+  async function muDeleteItem(it) {
+    if (!confirm('确定要删除「' + it.name + '」吗？文件将被移除，此操作不可恢复。')) return;
+    try {
+      await api('POST', '/api/admin/media/' + it.id + '/delete');
+      showMsgToast('已删除：' + it.name);
+      await loadMedia(true);
+    } catch (e) { showMsgToast('删除失败：' + e.message); }
+  }
+  function muAdminButtons(it) {
+    const frag = document.createDocumentFragment();
+    frag.appendChild(muOpBtn('mu-op-hide', it.hidden ? '取消隐藏' : '隐藏', it.hidden ? '👁' : '🚫', () => muToggleHidden(it)));
+    frag.appendChild(muOpBtn('mu-op-del', '删除', '✕', () => muDeleteItem(it)));
+    return frag;
+  }
   function muRenderList() {
     if (!muList) return;
     muList.innerHTML = '';
-    MU_TRACKS.forEach((t, i) => {
+    if (!MU_ITEMS.length) { muEmpty(muList, '（播放列表为空）'); return; }
+    const admin = isAdminRole();
+    MU_ITEMS.forEach((t, i) => {
       const li = document.createElement('button');
       li.type = 'button';
-      li.className = 'mu-item' + (i === muIdx ? ' active' : '');
+      li.className = 'mu-item' + (i === muIdx ? ' active' : '') + (t.hidden ? ' dim' : '');
       li.innerHTML = '<span class="mu-item-idx">' + (i === muIdx && !muAudio.paused ? '▶' : String(i + 1)) + '</span>' +
-        '<span class="mu-item-name">' + esc(t.name) + '</span>' +
-        '<span class="mu-item-artist">' + esc(t.artist) + '</span>';
+        '<span class="mu-item-name">' + esc(t.name) + (t.hidden ? ' <i class="mu-tag">已隐藏</i>' : '') + '</span>' +
+        '<span class="mu-item-artist">' + esc(t.artist || '') + '</span>';
+      if (admin) li.appendChild(muAdminButtons(t));
       li.addEventListener('click', () => muPlayIdx(i));
       muList.appendChild(li);
+    });
+  }
+  function muRenderVideoList() {
+    if (!muVideoList) return;
+    muVideoList.innerHTML = '';
+    if (!MU_VIDEOS.length) { muEmpty(muVideoList, '（暂无视频）'); return; }
+    const admin = isAdminRole();
+    MU_VIDEOS.forEach(t => {
+      const li = document.createElement('button');
+      li.type = 'button';
+      li.className = 'mu-item mu-item-video' + (muVideoName.textContent === t.name ? ' active' : '') + (t.hidden ? ' dim' : '');
+      li.innerHTML = '<span class="mu-item-idx">🎬</span>' +
+        '<span class="mu-item-name">' + esc(t.name) + (t.hidden ? ' <i class="mu-tag">已隐藏</i>' : '') + '</span>';
+      if (admin) li.appendChild(muAdminButtons(t));
+      li.addEventListener('click', () => muPlayVideo(t));
+      muVideoList.appendChild(li);
     });
   }
   function muSafePlay(a) {
     try { const p = a.play(); if (p && typeof p.catch === 'function') p.catch(function() {}); } catch (e) {}
   }
+  function muPlayVideo(t) {
+    if (!t) return;
+    muVideo.src = muSrc(t);
+    muVideoName.textContent = t.name;
+    muSafePlay(muVideo);
+    muRenderVideoList();
+  }
   function muPlayIdx(i, autoplay) {
-    muIdx = (i + MU_TRACKS.length) % MU_TRACKS.length;
-    const t = MU_TRACKS[muIdx];
-    muAudio.src = t.src;
+    if (!MU_ITEMS.length) { showMsgToast('播放列表为空'); return; }
+    muIdx = (i + MU_ITEMS.length) % MU_ITEMS.length;
+    const t = MU_ITEMS[muIdx];
+    muCurId = t.id;
+    muAudio.src = muSrc(t);
     muName.textContent = t.name;
-    muArtist.textContent = t.artist;
-    muWinTitle.textContent = t.name + ' - Luna音乐播放器';
+    muArtist.textContent = t.artist || '—';
+    muWinTitle.textContent = t.name + ' - Luna媒体播放器';
     if (autoplay !== false) muSafePlay(muAudio);
     muRenderList();
+  }
+  async function loadMedia(force) {
+    try {
+      const d = await api('GET', '/api/media');
+      const items = (d && d.items) || [];
+      MU_ITEMS = items.filter(x => x.type === 'music');
+      MU_VIDEOS = items.filter(x => x.type === 'video');
+    } catch (e) { if (force) showMsgToast('媒体列表加载失败：' + e.message); }
+    // 当前播放的曲目被删掉 → 复位
+    if (muCurId !== null) {
+      const ni = MU_ITEMS.findIndex(x => x.id === muCurId);
+      if (ni < 0 && muIdx >= 0) {
+        try { muAudio.pause(); muAudio.removeAttribute('src'); muAudio.load(); } catch (e) {}
+        muIdx = -1; muCurId = null;
+        muName.textContent = '未在播放';
+        muArtist.textContent = 'Luna媒体播放器';
+        muWinTitle.textContent = 'Luna媒体播放器';
+        muCur.textContent = '00:00'; muDur.textContent = '00:00'; muSeek.value = 0;
+      } else if (ni >= 0) muIdx = ni;
+    }
+    muMediaLoaded = true;
+    muRenderList();
+    muRenderVideoList();
+  }
+  function muRefreshAdminUI() {
+    if (muAdminBar) muAdminBar.hidden = !isAdminRole();
+  }
+  // 标签页切换（切换时暂停另一侧）
+  if (muTabMusic && muTabVideo) {
+    muTabMusic.addEventListener('click', () => {
+      muTabMusic.classList.add('active'); muTabVideo.classList.remove('active');
+      muPaneMusic.hidden = false; muPaneVideo.hidden = true;
+      try { if (!muVideo.paused) muVideo.pause(); } catch (e) {}
+    });
+    muTabVideo.addEventListener('click', () => {
+      muTabVideo.classList.add('active'); muTabMusic.classList.remove('active');
+      muPaneVideo.hidden = false; muPaneMusic.hidden = true;
+      try { muAudio.pause(); } catch (e) {}
+    });
+  }
+  // 管理员上传音乐/视频
+  if (muAdd && muFile) {
+    muAdd.addEventListener('click', () => {
+      if (!isAdminRole()) { showMsgToast('仅管理员可添加媒体'); return; }
+      muFile.click();
+    });
+    muFile.addEventListener('change', () => {
+      const f = muFile.files && muFile.files[0];
+      if (!f) return;
+      const okRe = /\.(mp3|wav|ogg|flac|m4a|aac|mp4|webm|mkv|mov)$/i;
+      const isAudio = /^audio\//i.test(f.type);
+      const isVideo = /^video\//i.test(f.type);
+      if (!isAudio && !isVideo && !okRe.test(f.name)) {
+        showMsgToast('不支持的格式（WMA/WMV 请先转成 MP3/MP4）'); muFile.value = ''; return;
+      }
+      if (/\.wma$|\.wmv$/i.test(f.name) || /ms-wma|ms-wmv/i.test(f.type)) {
+        showMsgToast('浏览器不支持 WMA/WMV，请先转换成 MP3/MP4'); muFile.value = ''; return;
+      }
+      if (f.size > 50 * 1024 * 1024) { showMsgToast('文件超过 50MB 上限'); muFile.value = ''; return; }
+      const defaultName = f.name.replace(/\.[^.]+$/, '').slice(0, 40) || '未命名';
+      const name = prompt('媒体名称：', defaultName) || defaultName;
+      const type = isVideo ? '视频' : '音乐';
+      const artist = isVideo ? '' : (prompt('艺术家（可留空）：', '') || '');
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const d = await api('POST', '/api/admin/media', { name, artist, type: isVideo ? 'video' : 'music', data: reader.result });
+          showMsgToast('已添加' + type + '：' + (d.item && d.item.name));
+          muFile.value = '';
+          await loadMedia(true);
+          const it = d.item;
+          if (it && it.type === 'music') {
+            const ni = MU_ITEMS.findIndex(x => x.id === it.id);
+            if (ni >= 0) { muTabMusic.click(); muPlayIdx(ni); }
+          } else if (it) {
+            muTabVideo.click();
+            muPlayVideo(MU_VIDEOS.find(x => x.id === it.id) || it);
+          }
+        } catch (e) { showMsgToast('上传失败：' + e.message); muFile.value = ''; }
+      };
+      reader.onerror = () => { showMsgToast('读取文件失败'); muFile.value = ''; };
+      reader.readAsDataURL(f);
+    });
   }
   if (muAudio) {
     muAudio.volume = 0.8;
@@ -1914,12 +2064,12 @@
     muAudio.addEventListener('ended', () => {
       const mode = muModes[muModeIdx];
       if (mode === 'one') { muAudio.currentTime = 0; muSafePlay(muAudio); }
-      else if (mode === 'shuffle') { let n; do { n = Math.floor(Math.random() * MU_TRACKS.length); } while (n === muIdx && MU_TRACKS.length > 1); muPlayIdx(n); }
-      else if (muIdx === MU_TRACKS.length - 1) muPlayIdx(0);
+      else if (mode === 'shuffle') { let n; do { n = Math.floor(Math.random() * MU_ITEMS.length); } while (n === muIdx && MU_ITEMS.length > 1); muPlayIdx(n); }
+      else if (muIdx === MU_ITEMS.length - 1) muPlayIdx(0);
       else muPlayIdx(muIdx + 1);
     });
     muAudio.addEventListener('error', () => {
-      if (muIdx >= 0) showMsgToast('无法播放：' + MU_TRACKS[muIdx].name + '（文件缺失或格式不支持）');
+      if (muIdx >= 0 && MU_ITEMS[muIdx]) showMsgToast('无法播放：' + MU_ITEMS[muIdx].name + '（文件缺失或格式不支持）');
     });
     muPlay.addEventListener('click', () => {
       if (muIdx < 0) { muPlayIdx(0); return; }
@@ -1942,12 +2092,12 @@
       muSeeking = false;
     });
     muVol.addEventListener('input', () => { muAudio.volume = muVol.value / 100; });
-    muRenderList();
+    if (muVideo) muVideo.volume = 0.9;
   }
 
   // 打开窗口时自动初始化对应内容
   const _openOrig = WM.open.bind(WM);
-  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'admin') openAdmin(); else if (id === 'gallery') loadGallery(); else if (id === 'account') loadAccount(); };
+  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'admin') openAdmin(); else if (id === 'gallery') loadGallery(); else if (id === 'account') loadAccount(); else if (id === 'music') { muRefreshAdminUI(); if (!muMediaLoaded) loadMedia(); } };
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   }

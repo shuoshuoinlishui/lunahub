@@ -6,9 +6,13 @@ data/users.json
 data/forum.json
 data/gallery.json
 data/wallpapers.json
+data/media.json
 
 # 用户上传的图片文件
 assets/wallpapers/user/
+
+# 管理员上传的媒体文件
+assets/media/
 
 # 测试文件
 test_api.mjs

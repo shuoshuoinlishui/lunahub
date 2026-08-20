@@ -11,6 +11,7 @@ const DATA = path.join(ROOT, 'data', 'forum.json');
 const DATA_USERS = path.join(ROOT, 'data', 'users.json');
 const DATA_GALLERY = path.join(ROOT, 'data', 'gallery.json');
 const DATA_WP = path.join(ROOT, 'data', 'wallpapers.json');
+const DATA_MEDIA = path.join(ROOT, 'data', 'media.json');
 const AVATAR_DIR = path.join(ROOT, 'assets', 'avatars');
 const WP_USER_DIR = path.join(ROOT, 'assets', 'wallpapers', 'user');
 const PORT = process.env.PORT || 3000;
@@ -213,7 +214,7 @@ function readBody(req) {
   return new Promise(resolve => {
     const chunks = [];
     let size = 0;
-    req.on('data', c => { chunks.push(c); size += c.length; if (size > 8e6) { req.destroy(); resolve({}); return; } });
+    req.on('data', c => { chunks.push(c); size += c.length; if (size > 68e6) { req.destroy(); resolve({}); return; } });
     req.on('end', () => {
       const s = Buffer.concat(chunks).toString('utf8');
       try { resolve(JSON.parse(s || '{}')); } catch (e) { resolve({}); }
@@ -256,7 +257,8 @@ const TYPES = {
   '.json': 'application/json; charset=utf-8',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.bmp': 'image/bmp',
-  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4'
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.flac': 'audio/flac',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mkv': 'video/x-matroska', '.mov': 'video/quicktime'
 };
 
 function serveStatic(p, res, req) {
@@ -791,6 +793,115 @@ const server = http.createServer(async (req, res) => {
     if (d.uploaded.length === before) return sendJSON(res, 404, { error: '壁纸不存在' });
     saveWp(d);
     if (target) { try { fs.unlinkSync(path.join(WP_USER_DIR, target.file)); } catch (e) {} }
+    return sendJSON(res, 200, { ok: true });
+  }
+
+  // === 媒体库（音乐 + 视频 / 管理员增删改隐） ===
+  const ASSETS_DIR = path.join(ROOT, 'assets');
+  const MEDIA_UPLOAD_DIR = path.join(ASSETS_DIR, 'media');
+  const SEED_MEDIA = [
+    { id: 'm-welcome',  type: 'music', file: 'music/welcome.mp3',        name: 'Windows 欢迎音乐',   artist: 'Microsoft', builtin: true },
+    { id: 'm-flourish', type: 'music', file: 'music/flourish.mp3',       name: 'Flourish',           artist: 'Microsoft 示例音乐', builtin: true },
+    { id: 'm-onestop',  type: 'music', file: 'music/onestop.mp3',        name: 'Onestop',            artist: 'Microsoft 示例音乐', builtin: true },
+    { id: 'm-town',     type: 'music', file: 'music/town.mp3',           name: 'Town',               artist: 'Microsoft 示例音乐', builtin: true },
+    { id: 'm-dusk',     type: 'music', file: 'music/黄昏-周传雄.mp3',    name: '黄昏',               artist: '周传雄', builtin: true },
+    { id: 'm-ten',      type: 'music', file: 'music/十年-陈奕迅.mp3',    name: '十年',               artist: '陈奕迅', builtin: true },
+    { id: 'v-winme',    type: 'video', file: 'videos/winme.mp4',         name: 'Windows Me',         artist: '', builtin: true },
+    { id: 'v-clip',     type: 'video', file: 'videos/clip-74615908.mp4', name: '视频片段',           artist: '', builtin: true }
+  ];
+  function mediaFileOk(f) {
+    return typeof f === 'string' && !f.includes('..') && !path.isAbsolute(f);
+  }
+  function mediaFileExists(it) {
+    try { fs.accessSync(path.join(ASSETS_DIR, it.file)); return true; } catch (e) { return false; }
+  }
+  function loadMedia() {
+    try { return JSON.parse(fs.readFileSync(DATA_MEDIA, 'utf8')); }
+    catch (e) { return { items: [] }; }
+  }
+  function saveMedia(d) {
+    fs.mkdirSync(path.dirname(DATA_MEDIA), { recursive: true });
+    fs.writeFileSync(DATA_MEDIA, JSON.stringify(d, null, 2));
+  }
+  try { fs.mkdirSync(MEDIA_UPLOAD_DIR, { recursive: true }); } catch (e) {}
+  (function seedMedia() {
+    let d;
+    try { d = JSON.parse(fs.readFileSync(DATA_MEDIA, 'utf8')); }
+    catch (e) { d = { items: [] }; }
+    let changed = false;
+    // 补种：物理文件存在但没有记录的内置条目
+    SEED_MEDIA.forEach(s => {
+      if (!d.items.some(x => x.id === s.id) && mediaFileExists(s)) { d.items.push(Object.assign({ hidden: false, uploader: 'system', createdAt: 0 }, s)); changed = true; }
+    });
+    // GC：记录在但物理文件丢失 → 删记录（上传项直接删；内置项保留 hidden 标记，等文件回来）——统一删，seed 会在文件回来时补
+    const keep = d.items.filter(it => it.builtin || mediaFileExists(it));
+    if (keep.length !== d.items.length) { d.items = keep; changed = true; }
+    if (changed || !fs.existsSync(DATA_MEDIA)) saveMedia(d);
+  })();
+
+  if (p === '/api/media' && req.method === 'GET') {
+    const items = loadMedia().items
+      .filter(it => isAdmin || !it.hidden)
+      .map(it => ({ id: it.id, type: it.type, file: it.file, name: it.name, artist: it.artist || '', hidden: !!it.hidden, builtin: !!it.builtin }));
+    return sendJSON(res, 200, { items });
+  }
+  const MEDIA_MIMES = {
+    'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav',
+    'audio/ogg': 'ogg', 'audio/flac': 'flac', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'aac',
+    'video/mp4': 'mp4', 'video/webm': 'webm', 'video/ogg': 'ogv', 'video/x-matroska': 'mkv'
+  };
+  if (p === '/api/admin/media' && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const b = await readBody(req);
+    const data = String(b.data || '');
+    const m = data.match(/^data:([a-z0-9\/+.-]+);base64,([A-Za-z0-9+/=]+)$/i);
+    if (!m) return sendJSON(res, 400, { error: '仅支持 base64 dataURL 上传' });
+    const mime = m[1].toLowerCase();
+    const ext = MEDIA_MIMES[mime];
+    if (!ext) {
+      if (mime === 'audio/x-ms-wma' || mime === 'video/x-ms-wmv' || /\.wma$|\.wmv$/i.test(String(b.name || '')))
+        return sendJSON(res, 400, { error: '浏览器不支持 WMA/WMV，请先转换成 MP3/MP4 再上传' });
+      return sendJSON(res, 400, { error: '不支持的媒体格式：' + mime });
+    }
+    const b64 = m[2];
+    const approx = Math.floor(b64.length * 0.75);
+    if (approx > 50 * 1024 * 1024) return sendJSON(res, 400, { error: '文件超过 50MB 上限' });
+    let type = (b.type === 'video' || /^video\//.test(mime)) ? 'video' : 'music';
+    const name = String(b.name || '未命名').trim().slice(0, 60) || '未命名';
+    const artist = String(b.artist || '').trim().slice(0, 40);
+    const id = 'u-' + crypto.randomBytes(8).toString('hex');
+    const file = 'media/' + id + '.' + ext;
+    try {
+      fs.mkdirSync(MEDIA_UPLOAD_DIR, { recursive: true });
+      fs.writeFileSync(path.join(ASSETS_DIR, file), Buffer.from(b64, 'base64'));
+    } catch (e) { return sendJSON(res, 500, { error: '保存失败：' + e.message }); }
+    const item = { id, type, file, name, artist, hidden: false, builtin: false, uploader: auth.user, createdAt: Date.now() };
+    const d = loadMedia();
+    d.items.push(item);
+    saveMedia(d);
+    return sendJSON(res, 201, { ok: true, item: { id: item.id, type: item.type, file: item.file, name: item.name, artist: item.artist, hidden: false, builtin: false } });
+  }
+  const mMediaHide = p.match(/^\/api\/admin\/media\/([^/]+)\/hide$/);
+  if (mMediaHide && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const b = await readBody(req);
+    const d = loadMedia();
+    const it = d.items.find(x => x.id === mMediaHide[1]);
+    if (!it) return sendJSON(res, 404, { error: '媒体不存在' });
+    it.hidden = b.hidden !== undefined ? !!b.hidden : !it.hidden;
+    saveMedia(d);
+    return sendJSON(res, 200, { ok: true, id: it.id, hidden: it.hidden });
+  }
+  const mMediaDel = p.match(/^\/api\/admin\/media\/([^/]+)\/delete$/);
+  if (mMediaDel && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const d = loadMedia();
+    const it = d.items.find(x => x.id === mMediaDel[1]);
+    if (!it) return sendJSON(res, 404, { error: '媒体不存在' });
+    if (!mediaFileOk(it.file)) return sendJSON(res, 400, { error: '非法文件路径' });
+    d.items = d.items.filter(x => x.id !== mMediaDel[1]);
+    saveMedia(d);
+    try { fs.unlinkSync(path.join(ASSETS_DIR, it.file)); } catch (e) {}
     return sendJSON(res, 200, { ok: true });
   }
 
