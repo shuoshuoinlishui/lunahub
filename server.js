@@ -9,8 +9,47 @@ const { URL } = require('url');
 const ROOT = __dirname;
 const DATA = path.join(ROOT, 'data', 'forum.json');
 const DATA_USERS = path.join(ROOT, 'data', 'users.json');
+const DATA_GALLERY = path.join(ROOT, 'data', 'gallery.json');
+const AVATAR_DIR = path.join(ROOT, 'assets', 'avatars');
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.FORUM_SECRET || 'lunahub-xp-forum-secret-v1';
+
+/* ---------- 预置头像（assets/avatars 下的 BMP） ---------- */
+const PRESET_AVATARS = (() => {
+  try { return fs.readdirSync(AVATAR_DIR).filter(f => /\.bmp$/i.test(f)).map(f => f.replace(/\.bmp$/i, '')).sort(); }
+  catch (e) { return []; }
+})();
+function avatarUrl(a) {
+  if (!a) return null;
+  if (a.startsWith('preset:')) {
+    const id = a.slice(7);
+    return PRESET_AVATARS.includes(id) ? '/assets/avatars/' + id + '.bmp' : null;
+  }
+  if (/^data:image\/(png|jpe?g|gif|webp|bmp);base64,/i.test(a)) return a;
+  return null;
+}
+
+/* ---------- 画廊种子数据 ---------- */
+const SEED_GALLERY = {
+  items: [
+    { id: 'g1', title: 'Luna Glass 原型', type: 'gradient', g1: '#0058e6', g2: '#5bc0ff' },
+    { id: 'g2', title: 'Longhorn 概念', type: 'gradient', g1: '#7b4397', g2: '#dc2430' },
+    { id: 'g3', title: 'Userbar 设计', type: 'gradient', g1: '#11998e', g2: '#38ef7d' },
+    { id: 'g4', title: 'Y2K 收藏', type: 'gradient', g1: '#f7971e', g2: '#ffd200' }
+  ]
+};
+function loadGallery() {
+  let d;
+  try { d = JSON.parse(fs.readFileSync(DATA_GALLERY, 'utf8')); }
+  catch (e) { d = JSON.parse(JSON.stringify(SEED_GALLERY)); saveGallery(d); return d; }
+  if (!d || !Array.isArray(d.items)) d = { items: SEED_GALLERY.items.slice() };
+  return d;
+}
+function saveGallery(d) {
+  fs.mkdirSync(path.dirname(DATA_GALLERY), { recursive: true });
+  fs.writeFileSync(DATA_GALLERY, JSON.stringify(d, null, 2));
+}
+if (!fs.existsSync(DATA_GALLERY)) saveGallery(JSON.parse(JSON.stringify(SEED_GALLERY)));
 
 /* ---------- 种子数据（首次启动写入，之后以文件为准） ---------- */
 function nowMinus(ms) { return Date.now() - ms; }
@@ -213,7 +252,7 @@ const TYPES = {
   '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
+  '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.bmp': 'image/bmp'
 };
 
 function serveStatic(p, res) {
@@ -359,6 +398,12 @@ function proxyFetch(target, res, depth) {
   preq.end();
 }
 
+function avatarMap() {
+  const m = {};
+  loadUsers().users.forEach(u => { const url = avatarUrl(u.avatar); if (url) m[u.user] = url; });
+  return m;
+}
+
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -383,7 +428,7 @@ const server = http.createServer(async (req, res) => {
     const salt = crypto.randomBytes(8).toString('hex');
     d.users.push({ user, salt, pass: hashPass(pass, salt), role: 'user', createdAt: Date.now() });
     saveUsers(d);
-    return sendJSON(res, 201, { ok: true, user, role: 'user', token: makeToken(user, 'user') });
+    return sendJSON(res, 201, { ok: true, user, role: 'user', token: makeToken(user, 'user'), avatar: null });
   }
 
   if (p === '/api/login' && req.method === 'POST') {
@@ -394,12 +439,31 @@ const server = http.createServer(async (req, res) => {
     const rec = d.users.find(x => x.user.toLowerCase() === user.toLowerCase());
     if (!rec || rec.pass !== hashPass(pass, rec.salt))
       return sendJSON(res, 401, { error: '用户名或密码错误' });
-    return sendJSON(res, 200, { ok: true, user: rec.user, role: rec.role, token: makeToken(rec.user, rec.role) });
+    return sendJSON(res, 200, { ok: true, user: rec.user, role: rec.role, token: makeToken(rec.user, rec.role), avatar: avatarUrl(rec.avatar) });
   }
 
   if (p === '/api/me' && req.method === 'GET') {
     if (!auth) return sendJSON(res, 401, { error: '未登录' });
-    return sendJSON(res, 200, { ok: true, user: auth.user, role: auth.role });
+    const rec = loadUsers().users.find(x => x.user.toLowerCase() === auth.user.toLowerCase());
+    return sendJSON(res, 200, { ok: true, user: auth.user, role: auth.role, avatar: avatarUrl(rec && rec.avatar) });
+  }
+
+  // === 头像列表 / 修改自己的头像 ===
+  if (p === '/api/avatars' && req.method === 'GET') {
+    return sendJSON(res, 200, { avatars: PRESET_AVATARS });
+  }
+  if (p === '/api/me/avatar' && req.method === 'POST') {
+    if (!auth) return sendJSON(res, 401, { error: '请先登录' });
+    const b = await readBody(req);
+    const a = String(b.avatar || '');
+    if (a && !avatarUrl(a)) return sendJSON(res, 400, { error: '头像无效（仅支持预置头像或图片文件）' });
+    if (a.startsWith('data:') && a.length > 400000) return sendJSON(res, 400, { error: '图片太大，请控制在 300KB 以内' });
+    const d = loadUsers();
+    const rec = d.users.find(x => x.user.toLowerCase() === auth.user.toLowerCase());
+    if (!rec) return sendJSON(res, 404, { error: '用户不存在' });
+    if (a) rec.avatar = a; else delete rec.avatar;
+    saveUsers(d);
+    return sendJSON(res, 200, { ok: true, avatar: avatarUrl(rec.avatar) });
   }
 
   // === 论坛只读 ===
@@ -413,6 +477,7 @@ const server = http.createServer(async (req, res) => {
       me: auth ? { user: auth.user, role: auth.role } : null,
       categories: d.categories || [],
       announcements: d.announcements || [],
+      avatars: avatarMap(),
       topics: topics.map(t => topicSummary(t, me))
     });
   }
@@ -424,7 +489,7 @@ const server = http.createServer(async (req, res) => {
     if (!t) return sendJSON(res, 404, { error: 'not found' });
     if (t.hidden && !isAdmin) return sendJSON(res, 404, { error: 'not found' });
     const me = auth ? auth.user : null;
-    return sendJSON(res, 200, { topic: { ...t, likedByMe: me ? (t.likes || []).includes(me) : false } });
+    return sendJSON(res, 200, { topic: { ...t, likedByMe: me ? (t.likes || []).includes(me) : false }, avatars: avatarMap() });
   }
 
   // 发新话题（需登录）
@@ -527,8 +592,8 @@ const server = http.createServer(async (req, res) => {
     rec.role = role; saveUsers(d);
     return sendJSON(res, 200, { ok: true, user: rec.user, role });
   }
-  const mud = p.match(/^\/api\/admin\/users\/([^/]+)$/);
-  if (mud && req.method === 'POST' && /delete/.test(p)) {
+  const mud = p.match(/^\/api\/admin\/users\/([^/]+)\/delete$/);
+  if (mud && req.method === 'POST') {
     if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
     const target = decodeURIComponent(mud[1]);
     if (auth.user.toLowerCase() === target.toLowerCase())
@@ -579,6 +644,59 @@ const server = http.createServer(async (req, res) => {
     });
     saveForum(d);
     return sendJSON(res, 201, { ok: true, announcement: d.announcements[0] });
+  }
+
+  // === 画廊（管理员可编辑） ===
+  if (p === '/api/gallery' && req.method === 'GET') {
+    return sendJSON(res, 200, { items: loadGallery().items });
+  }
+  function validGalleryItem(b) {
+    const title = String(b.title || '').trim();
+    if (!title) return { error: '标题不能为空' };
+    const type = b.type === 'image' ? 'image' : 'gradient';
+    if (type === 'gradient') {
+      const g1 = String(b.g1 || '').trim(), g2 = String(b.g2 || '').trim();
+      if (!/^#[0-9a-f]{3,8}$/i.test(g1) || !/^#[0-9a-f]{3,8}$/i.test(g2)) return { error: '渐变颜色格式无效' };
+      return { item: { title: title.slice(0, 60), type, g1, g2 } };
+    }
+    const image = String(b.image || '').trim();
+    if (!image) return { error: '图片地址不能为空' };
+    if (!/^(https?:\/\/|\/|data:image\/(png|jpe?g|gif|webp|bmp);base64,)/i.test(image)) return { error: '仅支持图片 URL 或上传的图片文件' };
+    if (image.startsWith('data:') && image.length > 400000) return { error: '图片太大，请控制在 300KB 以内' };
+    return { item: { title: title.slice(0, 60), type, image } };
+  }
+  if (p === '/api/admin/gallery' && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const b = await readBody(req);
+    const v = validGalleryItem(b);
+    if (v.error) return sendJSON(res, 400, { error: v.error });
+    const d = loadGallery();
+    const item = { id: 'g' + Date.now() + Math.floor(Math.random() * 1000), createdAt: Date.now(), ...v.item };
+    d.items.push(item); saveGallery(d);
+    return sendJSON(res, 201, { ok: true, item });
+  }
+  const mgd = p.match(/^\/api\/admin\/gallery\/([^/]+)\/delete$/);
+  if (mgd && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const d = loadGallery();
+    const before = d.items.length;
+    d.items = d.items.filter(x => x.id !== mgd[1]);
+    if (d.items.length === before) return sendJSON(res, 404, { error: '作品不存在' });
+    saveGallery(d);
+    return sendJSON(res, 200, { ok: true });
+  }
+  const mgu = p.match(/^\/api\/admin\/gallery\/([^/]+)$/);
+  if (mgu && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const b = await readBody(req);
+    const v = validGalleryItem(b);
+    if (v.error) return sendJSON(res, 400, { error: v.error });
+    const d = loadGallery();
+    const item = d.items.find(x => x.id === mgu[1]);
+    if (!item) return sendJSON(res, 404, { error: '作品不存在' });
+    Object.assign(item, v.item);
+    saveGallery(d);
+    return sendJSON(res, 200, { ok: true, item });
   }
 
   // === 内置浏览器代理 ===

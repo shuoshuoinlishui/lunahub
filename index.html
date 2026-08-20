@@ -186,12 +186,11 @@
       <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
     </div>
     <div class="winbody">
-      <div class="gallery">
-        <div class="g" style="--g1:#0058e6;--g2:#5bc0ff">Luna Glass 原型</div>
-        <div class="g" style="--g1:#7b4397;--g2:#dc2430">Longhorn 概念</div>
-        <div class="g" style="--g1:#11998e;--g2:#38ef7d">Userbar 设计</div>
-        <div class="g" style="--g1:#f7971e;--g2:#ffd200">Y2K 收藏</div>
+      <div class="gal-admin-bar" id="galAdminBar" hidden>
+        <button class="xp-btn small primary" id="galAddBtn">➕ 添加作品</button>
+        <span class="gal-hint">管理员模式：悬停作品可编辑 / 删除</span>
       </div>
+      <div class="gallery" id="galleryGrid"></div>
     </div>
   </section>
 
@@ -324,6 +323,31 @@
         <button class="cp-item" data-cp="power" type="button"><span class="cp-ico">⏻</span><span class="cp-txt">电源选项</span></button>
         <button class="cp-item" data-cp="addremove" type="button"><span class="cp-ico">📦</span><span class="cp-txt">添加/删除程序</span></button>
         <button class="cp-item" data-cp="logout" type="button"><span class="cp-ico">🚪</span><span class="cp-txt">注销</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 用户账户（头像管理） -->
+  <section class="window" id="account" data-title="用户账户" data-icon="👤" style="width:440px;height:460px">
+    <div class="titlebar">
+      <span class="ico">👤</span>
+      <span class="title">用户账户</span>
+      <span class="winbtns"><button class="wb min" title="最小化">_</button><button class="wb max" title="最大化">▢</button><button class="wb close" title="关闭">✕</button></span>
+    </div>
+    <div class="winbody account-body">
+      <div class="acct-me">
+        <div class="acct-bigava" id="acctBigAva">XP</div>
+        <div class="acct-meinfo">
+          <b id="acctName">未登录</b>
+          <span id="acctRole" class="acct-role"></span>
+          <div class="acct-tip">从下方挑选一张图片，或导入自己的图片作为头像</div>
+        </div>
+      </div>
+      <div class="acct-grid" id="acctGrid"></div>
+      <div class="acct-actions">
+        <button class="xp-btn small" id="acctImportBtn">📁 浏览图片…</button>
+        <button class="xp-btn small" id="acctResetBtn">↩ 重置为文字头像</button>
+        <input type="file" id="acctFile" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" hidden>
       </div>
     </div>
   </section>

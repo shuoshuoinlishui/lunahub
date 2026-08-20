@@ -198,7 +198,52 @@ body[data-fs="xl"] { --fs: 15px; --fs-title: 17px; --fs-big: 20px; }
   background: linear-gradient(135deg, var(--g1), var(--g2));
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.3);
   text-shadow: 0 1px 2px rgba(0,0,0,.5);
+  position: relative; overflow: hidden;
 }
+.g-img { background: #d6dff0; }
+.g-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.g-label { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 6px; background: rgba(0,0,0,.45); color: #fff; font-size: 11px; font-weight: bold; }
+.g-tools { position: absolute; top: 4px; right: 4px; display: none; gap: 4px; }
+.g:hover .g-tools { display: flex; }
+.g-tool { width: 22px; height: 22px; border: 1px solid #fff; border-radius: 3px; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; line-height: 1; cursor: pointer; }
+.g-tool:hover { background: #245edb; }
+.gal-admin-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.gal-hint { font-size: 11px; color: #7f8a9e; }
+.gal-editor { background: #f1f5fb; border: 1px solid #b8c6dd; border-radius: 4px; padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; }
+.gal-ed-row { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.gal-ed-row label { width: 52px; color: #333; flex: none; }
+.gal-ed-row input[type=text], .gal-ed-row select { flex: 1; min-width: 0; border: 1px solid #7f9db9; border-radius: 2px; padding: 3px 5px; font-size: 12px; }
+.gal-ed-row input[type=color] { width: 40px; height: 24px; border: 1px solid #7f9db9; border-radius: 2px; padding: 1px; background: #fff; }
+.gal-ed-preview { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+.gal-prev-block { width: 120px; height: 48px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.4); }
+.gal-prev-img { max-width: 160px; max-height: 48px; border: 1px solid #b8c6dd; border-radius: 3px; }
+.gal-ed-btns { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ===== 用户账户（头像） ===== */
+.account-body { display: flex; flex-direction: column; gap: 10px; }
+.acct-me { display: flex; align-items: center; gap: 12px; background: linear-gradient(135deg, #eaf2fc, #d7e4f7); border: 1px solid #b8c6dd; border-radius: 4px; padding: 10px; }
+.acct-bigava { width: 56px; height: 56px; border-radius: 6px; background: #fff; color: #245edb; display: grid; place-items: center; font-weight: bold; font-size: 20px; box-shadow: inset 0 0 0 1px #cfd6e6; overflow: hidden; flex: none; }
+.acct-bigava img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.acct-meinfo { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.acct-meinfo b { font-size: 15px; }
+.acct-role { font-size: 11px; color: #fff; background: #245edb; border-radius: 3px; padding: 1px 6px; width: fit-content; }
+.acct-tip { font-size: 11px; color: #6b7a92; }
+.acct-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; overflow-y: auto; flex: 1; align-content: start; }
+.acct-ava { border: 2px solid transparent; border-radius: 4px; background: #fff; padding: 2px; cursor: pointer; box-shadow: inset 0 0 0 1px #dfe5f0; }
+.acct-ava:hover { border-color: #245edb; background: #eaf2fc; }
+.acct-ava img { width: 100%; aspect-ratio: 1; display: block; image-rendering: pixelated; }
+.acct-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.sm-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 4px; }
+
+/* ===== 论坛头像 ===== */
+.uava { width: 26px; height: 26px; border-radius: 4px; object-fit: cover; display: inline-block; vertical-align: middle; box-shadow: inset 0 0 0 1px #d3dcea; }
+.uava-txt { background: linear-gradient(135deg, #7ba7e8, #3c6fc4); color: #fff; font-size: 13px; font-weight: bold; display: inline-grid; place-items: center; }
+.ti-left .ti-ava .uava { width: 30px; height: 30px; }
+.ti-left .ti-ava { margin-bottom: 3px; }
+.reply-head .uava { width: 22px; height: 22px; margin-right: 5px; }
+.post.topic-post { display: flex; gap: 10px; align-items: flex-start; }
+.post.topic-post > .uava { width: 40px; height: 40px; flex: none; }
+.post-main { flex: 1; min-width: 0; }
 
 /* ===== 捐赠 ===== */
 .donate-body { display: grid; grid-template-columns: 1fr 120px; gap: 14px; align-items: center; }

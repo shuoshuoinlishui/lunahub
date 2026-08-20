@@ -19,6 +19,7 @@
     browser: { icon: '🌐', title: 'Internet Explorer' },
     appearance: { icon: '🎨', title: '外观和个性化' },
     control:    { icon: '🛠️', title: '控制面板' },
+    account:    { icon: '👤', title: '用户账户' },
     admin:     { icon: '🛡️', title: '管理后台' }
   };
 
@@ -291,13 +292,20 @@
   let loggedIn = false;
   let authToken = null;
   let authRole = null;
+  let myAvatarUrl = null;
 
-  function setUserUI(u) {
+  function setUserUI(u, avatar) {
+    if (avatar !== undefined) myAvatarUrl = avatar;
     smUser.textContent = u;
-    smAvatar.textContent = u.slice(0, 2).toUpperCase();
+    renderAvatar(smAvatar, u, myAvatarUrl);
     trayLogin.innerHTML = '👤<span>' + u + '</span>';
     trayLogin.title = '已登录：' + u;
     updateAuthUI();
+  }
+  function renderAvatar(el, name, url) {
+    if (!el) return;
+    if (url) { el.innerHTML = '<img src="' + esc(url) + '" alt="">'; }
+    else { el.textContent = (name || 'XP').slice(0, 2).toUpperCase(); }
   }
   function currentUser() { return loggedIn ? smUser.textContent : null; }
   function updateAuthUI() {
@@ -356,7 +364,7 @@
     const res = await postJSON('/api/login', { user: u, pass: loginPass.value });
     loginSubmit.disabled = false;
     if (res.ok) {
-      loggedIn = true; setUserUI(u);
+      loggedIn = true; setUserUI(u, res.data.avatar || null);
       authToken = res.data.token; authRole = res.data.role;
       try { localStorage.setItem(SAVE_KEY, u); localStorage.setItem(TOKEN_KEY, res.data.token); localStorage.setItem(ROLE_KEY, res.data.role); } catch (e) {}
       closeLogin();
@@ -375,7 +383,7 @@
     const res = await postJSON('/api/register', { user: u, pass: p });
     regSubmit.disabled = false;
     if (res.ok) {
-      loggedIn = true; setUserUI(u);
+      loggedIn = true; setUserUI(u, res.data.avatar || null);
       authToken = res.data.token; authRole = res.data.role;
       try { localStorage.setItem(SAVE_KEY, u); localStorage.setItem(TOKEN_KEY, res.data.token); localStorage.setItem(ROLE_KEY, res.data.role); } catch (e) {}
       closeLogin();
@@ -386,10 +394,10 @@
   }
   function doLogout() {
     loggedIn = false;
-    authToken = null; authRole = null;
+    authToken = null; authRole = null; myAvatarUrl = null;
     try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(ROLE_KEY); } catch (e) {}
     smUser.textContent = '登录账户';
-    smAvatar.textContent = 'XP';
+    renderAvatar(smAvatar, 'XP', null);
     trayLogin.innerHTML = '👤<span>登录</span>';
     trayLogin.title = '登录账户';
     updateAuthUI();
@@ -415,7 +423,7 @@
       else if (act === 'network') WM.open('browser');
       else if (act === 'taskbar') WM.open('appearance');
       else if (act === 'account') {
-        if (loggedIn) showMsgToast('当前登录用户：' + currentUser() + (authRole === 'admin' ? '（管理员）' : ''));
+        if (loggedIn) WM.open('account');
         else openLogin();
       }
       else if (act === 'logout') doLogout();
@@ -539,11 +547,19 @@
     list.forEach(t => topicList.appendChild(makeTopicItem(t)));
   }
 
+  function avatarHtml(name, avatars) {
+    const url = avatars && avatars[name];
+    if (url) return '<img class="uava" src="' + esc(url) + '" alt="">';
+    return '<span class="uava uava-txt">' + esc(String(name || '?').slice(0, 1).toUpperCase()) + '</span>';
+  }
+
   function makeTopicItem(t) {
     const li = document.createElement('div'); li.className = 'topic-item';
     if (t.pinned) li.classList.add('pinned');
     if (t.hidden) li.classList.add('hidden-topic');
     const left = document.createElement('div'); left.className = 'ti-left';
+    const ava = document.createElement('div'); ava.className = 'ti-ava';
+    ava.innerHTML = avatarHtml(t.author, forumCache && forumCache.avatars);
     const tt = document.createElement('div'); tt.className = 'tt';
     let badge = '';
     if (t.pinned) badge += '<span class="badge pin">📌 置顶</span>';
@@ -551,7 +567,7 @@
     tt.innerHTML = badge + esc(t.title);
     const tm = document.createElement('div'); tm.className = 'tm';
     tm.textContent = '板块：' + (t.category || '—') + ' · ' + (t.author || '匿名') + ' · ' + fmtDate(t.createdAt);
-    left.appendChild(tt); left.appendChild(tm);
+    left.appendChild(ava); left.appendChild(tt); left.appendChild(tm);
     li.appendChild(left);
 
     const right = document.createElement('div'); right.className = 'ti-right';
@@ -601,8 +617,8 @@
     topicDetailView.hidden = false;
     const body = document.getElementById('topicDetailBody');
     body.innerHTML = '<div class="loading">加载中…</div>';
-    let t;
-    try { const d = await api('GET', '/api/topics/' + encodeURIComponent(id)); t = d.topic; }
+    let t, topicAvatars = {};
+    try { const d = await api('GET', '/api/topics/' + encodeURIComponent(id)); t = d.topic; topicAvatars = d.avatars || {}; }
     catch (e) { body.innerHTML = '<div class="empty-hint">加载失败：' + esc(e.message) + '</div>'; return; }
 
     body.innerHTML = '';
@@ -635,7 +651,7 @@
     body.appendChild(head);
 
     const first = document.createElement('div'); first.className = 'post topic-post';
-    first.innerHTML = '<b>' + esc(t.author || '匿名') + '</b><div class="pmeta">' + fmtDate(t.createdAt) + '</div><div class="pcontent">' + esc(t.body || '(无正文)') + '</div>';
+    first.innerHTML = avatarHtml(t.author, topicAvatars) + '<div class="post-main"><b>' + esc(t.author || '匿名') + '</b><div class="pmeta">' + fmtDate(t.createdAt) + '</div><div class="pcontent">' + esc(t.body || '(无正文)') + '</div></div>';
     body.appendChild(first);
 
     const repliesWrap = document.createElement('div'); repliesWrap.className = 'replies';
@@ -646,7 +662,7 @@
         const el = document.createElement('div'); el.className = 'reply'; el.dataset.rid = r.id;
         el.style.marginLeft = Math.min(depth, 6) * 18 + 'px';
         const inner = document.createElement('div'); inner.className = 'reply-inner';
-        inner.innerHTML = '<div class="reply-head"><b>' + esc(r.author) + '</b><span class="pmeta">' + fmtDate(r.createdAt) + '</span></div>' +
+        inner.innerHTML = '<div class="reply-head">' + avatarHtml(r.author, topicAvatars) + '<b>' + esc(r.author) + '</b><span class="pmeta">' + fmtDate(r.createdAt) + '</span></div>' +
           '<div class="pcontent">' + esc(r.body || '') + '</div>';
         const foot = document.createElement('div'); foot.className = 'reply-foot';
         const rl = document.createElement('button'); rl.className = 'like-btn small' + ((r.likes || []).indexOf(me) >= 0 ? ' liked' : '');
@@ -1257,9 +1273,204 @@
     iframe.addEventListener('load', () => { brwStatus.textContent = '完成'; brwTitle.textContent = url.replace(/^https?:\/\//, '').split('/')[0] + ' - Internet Explorer'; });
   }
 
+  /* ---------- 画廊（管理员可编辑） ---------- */
+  const galleryGrid = document.getElementById('galleryGrid');
+  const galAdminBar = document.getElementById('galAdminBar');
+  const galAddBtn = document.getElementById('galAddBtn');
+  let galItems = [];
+
+  async function loadGallery() {
+    if (!galleryGrid) return;
+    galleryGrid.innerHTML = '<div class="loading">加载中…</div>';
+    try {
+      const d = await api('GET', '/api/gallery');
+      galItems = d.items || [];
+    } catch (e) {
+      galleryGrid.innerHTML = '<div class="empty-hint">无法连接服务器，请确认 server.js 已启动。</div>';
+      return;
+    }
+    renderGallery();
+  }
+  function renderGallery() {
+    galleryGrid.innerHTML = '';
+    if (!galItems.length) { galleryGrid.innerHTML = '<div class="empty-hint">画廊还是空的，等待管理员添加作品。</div>'; return; }
+    galAdminBar.hidden = !isAdmin();
+    galItems.forEach(item => {
+      const cell = document.createElement('div');
+      cell.className = 'g';
+      if (item.type === 'image') {
+        cell.classList.add('g-img');
+        cell.innerHTML = '<img src="' + esc(item.image) + '" alt="" loading="lazy">';
+      } else {
+        cell.style.setProperty('--g1', item.g1 || '#3c7fb1');
+        cell.style.setProperty('--g2', item.g2 || '#245edb');
+      }
+      cell.insertAdjacentHTML('beforeend', '<span class="g-label">' + esc(item.title) + '</span>');
+      if (isAdmin()) {
+        const tools = document.createElement('div');
+        tools.className = 'g-tools';
+        const ed = document.createElement('button');
+        ed.className = 'g-tool'; ed.title = '编辑'; ed.textContent = '✎';
+        ed.addEventListener('click', e => { e.stopPropagation(); openGalleryEditor(item); });
+        const del = document.createElement('button');
+        del.className = 'g-tool'; del.title = '删除'; del.textContent = '✕';
+        del.addEventListener('click', e => { e.stopPropagation(); deleteGalleryItem(item); });
+        tools.appendChild(ed); tools.appendChild(del);
+        cell.appendChild(tools);
+      }
+      galleryGrid.appendChild(cell);
+    });
+  }
+  async function deleteGalleryItem(item) {
+    if (!confirm('确定从画廊删除「' + item.title + '」吗？')) return;
+    try {
+      await api('POST', '/api/admin/gallery/' + encodeURIComponent(item.id) + '/delete');
+      showMsgToast('已删除：' + item.title);
+      loadGallery();
+    } catch (e) { showMsgToast('操作失败：' + e.message); }
+  }
+  function openGalleryEditor(item) {
+    const isNew = !item;
+    const box = document.createElement('div');
+    box.className = 'gal-editor';
+    box.innerHTML =
+      '<div class="gal-ed-row"><label>标题</label><input type="text" class="gal-ed-title" maxlength="60" value="' + esc(item ? item.title : '') + '"></div>' +
+      '<div class="gal-ed-row"><label>类型</label><select class="gal-ed-type">' +
+        '<option value="gradient"' + (!item || item.type !== 'image' ? ' selected' : '') + '>渐变色块</option>' +
+        '<option value="image"' + (item && item.type === 'image' ? ' selected' : '') + '>图片</option>' +
+      '</select></div>' +
+      '<div class="gal-ed-row gal-ed-grad"><label>颜色 1</label><input type="color" class="gal-ed-g1" value="' + esc(item && item.g1 || '#0058e6') + '">' +
+        '<label>颜色 2</label><input type="color" class="gal-ed-g2" value="' + esc(item && item.g2 || '#5bc0ff') + '"></div>' +
+      '<div class="gal-ed-row gal-ed-img" hidden><label>图片</label>' +
+        '<input type="text" class="gal-ed-url" placeholder="图片 URL（https://…）" value="' + esc(item && item.type === 'image' ? item.image.replace(/^data:.*/, '') : '') + '">' +
+        '<button type="button" class="xp-btn small gal-ed-file">📁 本地图片…</button>' +
+        '<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" hidden></div>' +
+      '<div class="gal-ed-preview"></div>' +
+      '<div class="gal-ed-btns"><button class="xp-btn small gal-ed-cancel">取消</button><button class="xp-btn small primary gal-ed-save">' + (isNew ? '添加' : '保存') + '</button></div>';
+    galleryGrid.parentNode.insertBefore(box, galleryGrid);
+    if (item) box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const typeSel = box.querySelector('.gal-ed-type');
+    const gradRow = box.querySelector('.gal-ed-grad');
+    const imgRow = box.querySelector('.gal-ed-img');
+    const fileBtn = box.querySelector('.gal-ed-file');
+    const fileInput = box.querySelector('input[type=file]');
+    const urlInput = box.querySelector('.gal-ed-url');
+    const preview = box.querySelector('.gal-ed-preview');
+    function syncType() {
+      gradRow.hidden = typeSel.value !== 'gradient';
+      imgRow.hidden = typeSel.value !== 'image';
+    }
+    typeSel.addEventListener('change', syncType);
+    syncType();
+    function updatePreview() {
+      if (typeSel.value === 'gradient') {
+        preview.innerHTML = '<div class="gal-prev-block" style="background:linear-gradient(135deg,' + box.querySelector('.gal-ed-g1').value + ',' + box.querySelector('.gal-ed-g2').value + ')"></div>';
+      } else if (urlInput.value) {
+        preview.innerHTML = '<img class="gal-prev-img" src="' + esc(urlInput.value) + '" alt="">';
+      } else preview.innerHTML = '';
+    }
+    box.querySelector('.gal-ed-g1').addEventListener('input', updatePreview);
+    box.querySelector('.gal-ed-g2').addEventListener('input', updatePreview);
+    urlInput.addEventListener('input', updatePreview);
+    fileBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files[0];
+      if (!f) return;
+      if (f.size > 300 * 1024) { showMsgToast('图片太大，请控制在 300KB 以内'); fileInput.value = ''; return; }
+      const rd = new FileReader();
+      rd.onload = () => { urlInput.value = rd.result; updatePreview(); };
+      rd.readAsDataURL(f);
+    });
+    box.querySelector('.gal-ed-cancel').addEventListener('click', () => box.remove());
+    box.querySelector('.gal-ed-save').addEventListener('click', async () => {
+      const payload = { title: box.querySelector('.gal-ed-title').value, type: typeSel.value };
+      if (payload.type === 'gradient') {
+        payload.g1 = box.querySelector('.gal-ed-g1').value;
+        payload.g2 = box.querySelector('.gal-ed-g2').value;
+      } else {
+        payload.image = urlInput.value.trim();
+        if (!payload.image) { showMsgToast('请填写图片地址或选择本地图片'); return; }
+      }
+      try {
+        if (isNew) await api('POST', '/api/admin/gallery', payload);
+        else await api('POST', '/api/admin/gallery/' + encodeURIComponent(item.id), payload);
+        box.remove();
+        showMsgToast(isNew ? '已添加到画廊' : '画廊已更新');
+        loadGallery();
+      } catch (e) { showMsgToast('保存失败：' + e.message); }
+    });
+  }
+  if (galAddBtn) galAddBtn.addEventListener('click', () => {
+    const exist = galleryGrid.parentNode.querySelector('.gal-editor');
+    if (exist) exist.remove();
+    openGalleryEditor(null);
+  });
+
+  /* ---------- 用户账户（头像管理） ---------- */
+  const acctGrid = document.getElementById('acctGrid');
+  const acctBigAva = document.getElementById('acctBigAva');
+  const acctName = document.getElementById('acctName');
+  const acctRole = document.getElementById('acctRole');
+  const acctImportBtn = document.getElementById('acctImportBtn');
+  const acctResetBtn = document.getElementById('acctResetBtn');
+  const acctFile = document.getElementById('acctFile');
+  let acctList = null;
+
+  async function loadAccount() {
+    if (!acctGrid) return;
+    acctName.textContent = loggedIn ? currentUser() : '未登录';
+    acctRole.textContent = loggedIn ? (authRole === 'admin' ? '管理员' : '普通用户') : '';
+    renderAvatar(acctBigAva, currentUser(), myAvatarUrl);
+    if (!loggedIn) {
+      acctGrid.innerHTML = '<div class="empty-hint">请先登录后更换头像。</div>';
+      return;
+    }
+    if (acctList === null) {
+      try { acctList = (await api('GET', '/api/avatars')).avatars || []; }
+      catch (e) { acctList = []; }
+    }
+    acctGrid.innerHTML = '';
+    acctList.forEach(id => {
+      const b = document.createElement('button');
+      b.className = 'acct-ava'; b.type = 'button'; b.title = id;
+      b.innerHTML = '<img src="/assets/avatars/' + encodeURIComponent(id) + '.bmp" alt="">';
+      b.addEventListener('click', () => saveAvatar('preset:' + id));
+      acctGrid.appendChild(b);
+    });
+  }
+  async function saveAvatar(value) {
+    if (!loggedIn) { openLogin(); return; }
+    try {
+      const d = await api('POST', '/api/me/avatar', { avatar: value });
+      myAvatarUrl = d.avatar || null;
+      renderAvatar(smAvatar, currentUser(), myAvatarUrl);
+      renderAvatar(acctBigAva, currentUser(), myAvatarUrl);
+      showMsgToast('头像已更新');
+      if (typeof topicListView !== 'undefined' && topicListView && !topicListView.hidden) loadForum();
+    } catch (e) { showMsgToast('保存失败：' + e.message); }
+  }
+  if (acctImportBtn) acctImportBtn.addEventListener('click', () => {
+    if (!loggedIn) { openLogin(); return; }
+    acctFile.click();
+  });
+  if (acctFile) acctFile.addEventListener('change', () => {
+    const f = acctFile.files[0];
+    if (!f) return;
+    if (f.size > 300 * 1024) { showMsgToast('图片太大，请控制在 300KB 以内'); acctFile.value = ''; return; }
+    if (!/^image\/(png|jpe?g|gif|webp|bmp)$/i.test(f.type)) { showMsgToast('仅支持 PNG / JPG / GIF / WebP / BMP 图片'); acctFile.value = ''; return; }
+    const rd = new FileReader();
+    rd.onload = () => saveAvatar(rd.result);
+    rd.readAsDataURL(f);
+    acctFile.value = '';
+  });
+  if (acctResetBtn) acctResetBtn.addEventListener('click', () => {
+    if (!loggedIn) { openLogin(); return; }
+    saveAvatar('');
+  });
+
   // 打开窗口时自动初始化对应内容
   const _openOrig = WM.open.bind(WM);
-  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'admin') openAdmin(); };
+  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'admin') openAdmin(); else if (id === 'gallery') loadGallery(); else if (id === 'account') loadAccount(); };
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   }
@@ -1287,9 +1498,9 @@
     if (u && tk) { loggedIn = true; authToken = tk; authRole = rl; setUserUI(u); }
   } catch (e) {}
   updateAuthUI();
-  // 校验 token 是否仍然有效，并刷新角色
+  // 校验 token 是否仍然有效，并刷新角色与头像
   if (authToken) {
-    api('GET', '/api/me').then(d => { authRole = d.role; updateAuthUI(); })
+    api('GET', '/api/me').then(d => { authRole = d.role; setUserUI(currentUser(), d.avatar === undefined ? undefined : (d.avatar || null)); updateAuthUI(); })
       .catch(() => { /* token 失效，下次操作会提示登录 */ });
   }
   WM.open('home');
