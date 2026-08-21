@@ -23,6 +23,8 @@
     photos:  { icon: '📷', title: 'Luna照片查看器' },
     paint:   { icon: '🎨', title: 'Luna画图' },
     pointer: { icon: '🖍️', title: '电子教鞭' },
+    calculator: { icon: '🧮', title: '计算器' },
+    pptlou: { icon: '📽️', title: 'PowerPoint (lou 版)' },
     appearance: { icon: '🎨', title: '外观和个性化' },
     control:    { icon: '🛠️', title: '控制面板' },
     account:    { icon: '👤', title: '用户账户' },
@@ -245,11 +247,25 @@
     t._timer = setTimeout(() => { t.style.display = 'none'; }, 2600);
   }
 
-  /* ---------- 桌面图标 / 快速启动 / 开始菜单项：打开应用 ---------- */
+  /* ---------- 桌面图标 / 快速启动 / 开始菜单项：打开应用（含权限检查） ---------- */
+  // 仅「管理后台」需要管理员权限；其余应用（论坛/画廊/话题/关于/浏览器/外观/媒体 等）游客均可直接打开
+  const ADMIN_ONLY = new Set(['admin']);
+  function canOpenApp(appId) {
+    if (!appId) return true;
+    if (ADMIN_ONLY.has(appId)) return isAdmin();
+    return true;
+  }
   document.querySelectorAll('[data-open]').forEach(el => {
     el.addEventListener('click', e => {
       e.preventDefault();
-      WM.open(el.dataset.open);
+      const id = el.dataset.open;
+      if (!canOpenApp(id)) {
+        if (!loggedIn) openLogin();
+        else showMsgToast('当前账号无权限访问该应用');
+        closeStart();
+        return;
+      }
+      WM.open(id);
       closeStart();
     });
   });
@@ -452,6 +468,7 @@
 
   // 关机（经典 XP 关机体验）
   const smShut = document.getElementById('smShut');
+  const smGuest = document.getElementById('smGuest');
   function shutdown() {
     Object.values(WM.wins).forEach(w => w.el.classList.add('closed'));
     if (loggedIn) doLogout();
@@ -467,6 +484,15 @@
     });
   }
   if (smShut) smShut.addEventListener('click', e => { e.preventDefault(); closeStart(); shutdown(); });
+  if (smGuest) smGuest.addEventListener('click', e => {
+    e.preventDefault();
+    closeStart();
+    // guest login as 'user' without backend
+    loggedIn = true; authRole = 'user'; authToken = null;
+    try { localStorage.setItem(SAVE_KEY, 'user'); } catch (e) {}
+    setUserUI('user');
+    showMsgToast('已以访客 user 登录');
+  });
   loginOverlay.addEventListener('click', e => { if (e.target === loginOverlay) closeLogin(); });
   loginUser.addEventListener('keydown', e => { if (e.key === 'Enter') loginPass.focus(); });
   loginPass.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -1001,9 +1027,77 @@
     document.querySelectorAll('#wpGrid .wp, #wpUserGrid .wp').forEach(el => el.classList.toggle('sel', el.dataset.id === wp.id));
     document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
   }
+  // color helpers: hex <-> rgb <-> hsl and adjust lightness
+  function hexToRgb(hex) {
+    if (!hex) return null;
+    hex = hex.replace('#','');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    const int = parseInt(hex, 16);
+    return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
+  }
+  function rgbToHex(r,g,b) {
+    return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+  }
+  function rgbToHsl(r,g,b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b);
+    let h = 0, s = 0, l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+    return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+  }
+  function hslToRgb(h,s,l) {
+    h /= 360; s /= 100; l /= 100;
+    let r,g,b;
+    if (s === 0) { r = g = b = l; }
+    else {
+      const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1; if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      };
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
+    }
+    return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+  }
+  function adjustLightness(hex, deltaPercent) {
+    try {
+      const rgb = hexToRgb(hex);
+      if (!rgb) return hex;
+      const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+      hsl.l = Math.max(0, Math.min(100, hsl.l + deltaPercent));
+      const nrgb = hslToRgb(hsl.h, hsl.s, hsl.l);
+      return rgbToHex(nrgb.r, nrgb.g, nrgb.b);
+    } catch (e) { return hex; }
+  }
+  function deriveAccent(c1, c2) {
+    // c1/c2 expected as hex (e.g. #3c7fb1)
+    document.documentElement.style.setProperty('--acc1', c1);
+    document.documentElement.style.setProperty('--acc2', c2);
+    // inactive titlebar: slightly lighter
+    document.documentElement.style.setProperty('--acci1', adjustLightness(c1, 14));
+    document.documentElement.style.setProperty('--acci2', adjustLightness(c2, 14));
+    // darker variants for borders/active accents/text
+    document.documentElement.style.setProperty('--accd1', adjustLightness(c1, -18));
+    document.documentElement.style.setProperty('--accd2', adjustLightness(c2, -28));
+  }
+
   function applyAccent(a) {
-    document.documentElement.style.setProperty('--acc1', a.c1);
-    document.documentElement.style.setProperty('--acc2', a.c2);
+    deriveAccent(a.c1, a.c2);
     try { localStorage.setItem('lunahub_accent', a.id); } catch (e) {}
     document.querySelectorAll('#accentGrid .accent').forEach(el => el.classList.toggle('sel', el.dataset.id === a.id));
     document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
@@ -1209,8 +1303,7 @@
       'linear-gradient(180deg,' + (wccC1.value) + ',' + (wccC2.value) + ')';
   }
   function applyCustomAccent(c1, c2) {
-    document.documentElement.style.setProperty('--acc1', c1);
-    document.documentElement.style.setProperty('--acc2', c2);
+    deriveAccent(c1, c2);
     try { localStorage.setItem('lunahub_accent_custom', JSON.stringify({ c1, c2 })); } catch (e) {}
     document.querySelectorAll('#accentGrid .accent').forEach(el => el.classList.remove('sel'));
     document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
@@ -2901,7 +2994,21 @@
 
   // 打开窗口时自动初始化对应内容
   const _openOrig = WM.open.bind(WM);
-  WM.open = function (id) { _openOrig(id); if (id === 'browser' && brwHistIdx < 0) showHome(); else if (id === 'topics') loadForum(); else if (id === 'forums') { if (!forumCache) loadForum(); else renderForums(); } else if (id === 'admin') openAdmin(); else if (id === 'gallery') loadGallery(); else if (id === 'account') loadAccount(); else if (id === 'music') { muRefreshAdminUI(); if (!muMediaLoaded) loadMedia(); } else if (id === 'photos') { if (!PH_LIST.length) phLoadSample(); } else if (id === 'pointer') { ptrOpen(); } else if (id === 'home') homeShowHero(); };
+  WM.open = function (id) {
+    _openOrig(id);
+    if (id === 'browser' && brwHistIdx < 0) showHome();
+    else if (id === 'topics') loadForum();
+    else if (id === 'forums') { if (!forumCache) loadForum(); else renderForums(); }
+    else if (id === 'admin') openAdmin();
+    else if (id === 'gallery') loadGallery();
+    else if (id === 'account') loadAccount();
+    else if (id === 'music') { muRefreshAdminUI(); if (!muMediaLoaded) loadMedia(); }
+    else if (id === 'photos') { if (!PH_LIST.length) phLoadSample(); }
+    else if (id === 'pointer') { ptrOpen(); }
+    else if (id === 'calculator') { initCalculator(); }
+    else if (id === 'pptlou') { initPptLou(); }
+    else if (id === 'home') homeShowHero();
+  };
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   }
@@ -2927,6 +3034,7 @@
     const tk = localStorage.getItem(TOKEN_KEY);
     const rl = localStorage.getItem(ROLE_KEY);
     if (u && tk) { loggedIn = true; authToken = tk; authRole = rl; setUserUI(u); }
+    else if (u && !tk && u === 'user') { /* local guest stored */ loggedIn = true; authRole = 'user'; setUserUI('user'); }
   } catch (e) {}
   updateAuthUI();
   // 校验 token 是否仍然有效，并刷新角色与头像
@@ -2934,6 +3042,263 @@
     api('GET', '/api/me').then(d => { authRole = d.role; setUserUI(currentUser(), d.avatar === undefined ? undefined : (d.avatar || null)); updateAuthUI(); })
       .catch(() => { /* token 失效，下次操作会提示登录 */ });
   }
+
+  // 启动画面（可点击跳过）
+  (function showBoot() {
+    const b = document.createElement('div');
+    b.className = 'boot-screen';
+    b.innerHTML = '<div class="bs-inner"><div class="bs-logo">Windows XP</div><div class="bs-tip">正在启动 Lunahub…</div></div>';
+    document.body.appendChild(b);
+    requestAnimationFrame(() => b.classList.add('show'));
+    const onDone = () => { b.classList.remove('show'); setTimeout(() => { b.remove(); }, 480); };
+    b.addEventListener('click', onDone);
+    setTimeout(onDone, 2000);
+  })();
+
+  // 初始化计算器（替换 eval，为键盘输入与安全解析）
+  function initCalculator() {
+    const disp = document.getElementById('calcDisplay');
+    const keys = document.getElementById('calcKeys');
+    const winEl = document.getElementById('calculator');
+    if (!disp || !keys) return;
+    let expr = '';
+
+    // Tokenize expression into numbers, operators, parentheses
+    function tokenize(s) {
+      const tokens = [];
+      const re = /\s*([0-9]*\.?[0-9]+|[+\-*/()])\s*/g;
+      let m; let last = null;
+      while ((m = re.exec(s)) !== null) {
+        let t = m[1];
+        // handle unary minus: if t === '-' and last is null or operator or '('
+        if (t === '-' && (last === null || /[+\-*/(]/.test(last))) {
+          // represent unary minus as '0' and '-' operator
+          tokens.push('0');
+        }
+        tokens.push(t);
+        last = t;
+      }
+      return tokens;
+    }
+
+    // Shunting-yard: infix tokens -> RPN
+    function toRPN(tokens) {
+      const out = []; const ops = [];
+      const prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
+      tokens.forEach(t => {
+        if (/^[0-9]/.test(t)) { out.push(t); }
+        else if (t === '+' || t === '-' || t === '*' || t === '/') {
+          while (ops.length) {
+            const o = ops[ops.length - 1];
+            if ((o === '+' || o === '-' || o === '*' || o === '/') && (prec[o] >= prec[t])) {
+              out.push(ops.pop());
+            } else break;
+          }
+          ops.push(t);
+        } else if (t === '(') { ops.push(t); }
+        else if (t === ')') {
+          while (ops.length && ops[ops.length - 1] !== '(') out.push(ops.pop());
+          if (ops.length && ops[ops.length - 1] === '(') ops.pop();
+        }
+      });
+      while (ops.length) out.push(ops.pop());
+      return out;
+    }
+
+    // Evaluate RPN
+    function evalRPN(rpn) {
+      const st = [];
+      rpn.forEach(t => {
+        if (/^[0-9]/.test(t)) st.push(parseFloat(t));
+        else {
+          const b = st.pop(); const a = st.pop();
+          if (a === undefined || b === undefined) throw new Error('Invalid');
+          let r = 0;
+          if (t === '+') r = a + b;
+          else if (t === '-') r = a - b;
+          else if (t === '*') r = a * b;
+          else if (t === '/') { if (b === 0) throw new Error('Div0'); r = a / b; }
+          st.push(r);
+        }
+      });
+      if (st.length !== 1) throw new Error('Invalid');
+      return st[0];
+    }
+
+    function safeEval(s) {
+      try {
+        const tokens = tokenize(s);
+        const rpn = toRPN(tokens);
+        const v = evalRPN(rpn);
+        if (!isFinite(v)) throw new Error('非有限数');
+        return v;
+      } catch (e) { throw e; }
+    }
+
+    function updateDisplay() { disp.value = expr; }
+
+    keys.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const v = btn.textContent.trim();
+        if (v === 'C') { expr = ''; updateDisplay(); return; }
+        if (v === '=') {
+          try { const res = safeEval(expr || '0'); expr = String(res); updateDisplay(); } catch (e) { disp.value = '错误'; expr = ''; }
+          return;
+        }
+        // append valid characters only
+        if (/^[0-9.+\-*/() ]$/.test(v)) { expr += v; updateDisplay(); }
+      });
+    });
+
+    // Keyboard support when calculator window is open
+    function onKey(e) {
+      if (!winEl || winEl.classList.contains('closed')) return;
+      const k = e.key;
+      if (/^[0-9]$/.test(k)) { expr += k; updateDisplay(); e.preventDefault(); return; }
+      if (k === '.') { expr += '.'; updateDisplay(); e.preventDefault(); return; }
+      if (k === '+' || k === '-' || k === '*' || k === '/') { expr += k; updateDisplay(); e.preventDefault(); return; }
+      if (k === 'Enter') { try { const res = safeEval(expr || '0'); expr = String(res); updateDisplay(); } catch (err) { disp.value = '错误'; expr = ''; } e.preventDefault(); return; }
+      if (k === 'Backspace') { expr = expr.slice(0, -1); updateDisplay(); e.preventDefault(); return; }
+      if (k === 'Escape') { expr = ''; updateDisplay(); e.preventDefault(); return; }
+    }
+    if (!window._calcKeyInit) {
+      window.addEventListener('keydown', onKey);
+      window._calcKeyInit = true;
+    }
+
+    // Cleanup: listener persists but checks calculator visibility before acting
+  }
+
+  // 初始化 PPT lou
+  function initPptLou() {
+    const slideEl = document.getElementById('pptSlide');
+    const thumbsEl = document.getElementById('pptThumbs');
+    if (!slideEl) return;
+    const PPT_KEY = 'pptlou_slides';
+    let slides = [{ type: 'text', content: '（空白幻灯片）' }];
+    let idx = 0;
+    try {
+      const raw = localStorage.getItem(PPT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length) slides = parsed;
+      }
+    } catch (e) {}
+    function saveSlides() { try { localStorage.setItem(PPT_KEY, JSON.stringify(slides)); } catch (e) {} }
+    function render() {
+      const s = slides[idx] || { type: 'text', content: '（空白幻灯片）' };
+      if (s.type === 'image') {
+        slideEl.innerHTML = '<img src="' + s.content + '" alt="slide" style="max-width:100%;max-height:100%;object-fit:contain">';
+      } else {
+        slideEl.innerHTML = '<div style="padding:10px;text-align:center;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">' + (s.content || '') + '</div>';
+      }
+      renderThumbs();
+    }
+
+    function renderThumbs() {
+      if (!thumbsEl) return;
+      thumbsEl.innerHTML = '';
+      slides.forEach((sld, i) => {
+        const t = document.createElement('div'); t.className = 'ppt-thumb'; t.draggable = true; t.dataset.i = i;
+        const idxLabel = document.createElement('div'); idxLabel.className = 'thumb-index'; idxLabel.textContent = (i + 1);
+        t.appendChild(idxLabel);
+        if (sld.type === 'image') {
+          const im = document.createElement('img'); im.src = sld.content; t.appendChild(im);
+        } else {
+          const tt = document.createElement('div'); tt.className = 'tt-text'; tt.textContent = sld.content || '（空白）'; t.appendChild(tt);
+        }
+        const del = document.createElement('button'); del.className = 'thumb-del'; del.textContent = '✕';
+        del.addEventListener('click', (ev) => { ev.stopPropagation(); if (!confirm('删除幻灯片 ' + (i+1) + '？')) return; slides.splice(i,1); if (idx >= slides.length) idx = Math.max(0, slides.length - 1); if (!slides.length) { slides = [{ type: 'text', content: '（空白幻灯片）' }]; idx = 0; } saveSlides(); render(); });
+        t.appendChild(del);
+        t.addEventListener('click', () => { idx = i; render(); });
+
+        // drag handlers
+        t.addEventListener('dragstart', (ev) => { t.classList.add('dragging'); ev.dataTransfer.setData('text/plain', String(i)); ev.dataTransfer.effectAllowed = 'move'; });
+        t.addEventListener('dragend', () => { t.classList.remove('dragging'); document.querySelectorAll('.ppt-thumb.over').forEach(x => x.classList.remove('over')); });
+        t.addEventListener('dragover', (ev) => { ev.preventDefault(); t.classList.add('over'); ev.dataTransfer.dropEffect = 'move'; });
+        t.addEventListener('dragleave', () => { t.classList.remove('over'); });
+        t.addEventListener('drop', (ev) => {
+          ev.preventDefault(); t.classList.remove('over'); const src = parseInt(ev.dataTransfer.getData('text/plain'), 10); const dst = i;
+          if (isNaN(src) || src === dst) return;
+          const item = slides.splice(src,1)[0];
+          // adjust dst if src < dst since array shifted
+          const insertAt = (src < dst) ? dst : dst;
+          slides.splice(insertAt, 0, item);
+          saveSlides(); idx = slides.indexOf(item); render();
+        });
+
+        thumbsEl.appendChild(t);
+      });
+    }
+
+    render();
+    const prev = document.getElementById('pptPrev');
+    const next = document.getElementById('pptNext');
+    const nw = document.getElementById('pptNew');
+    const imgBtn = document.getElementById('pptImg');
+    const delBtn = document.getElementById('pptDel');
+    const fileInput = document.getElementById('pptFile');
+    const exportBtn = document.getElementById('pptExport');
+    const importBtn = document.getElementById('pptImport');
+    const importFile = document.getElementById('pptImportFile');
+    if (prev) prev.addEventListener('click', () => { idx = Math.max(0, idx - 1); render(); });
+    if (next) next.addEventListener('click', () => { idx = Math.min(slides.length - 1, idx + 1); render(); });
+    if (nw) nw.addEventListener('click', () => {
+      const t = prompt('幻灯片内容：', '新幻灯片');
+      if (t != null) { slides.push({ type: 'text', content: t }); idx = slides.length - 1; saveSlides(); render(); }
+    });
+    if (imgBtn && fileInput) {
+      imgBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (!f) return;
+        if (!/^image\//i.test(f.type)) { showMsgToast('仅支持图片文件'); fileInput.value = ''; return; }
+        const reader = new FileReader();
+        reader.onload = () => {
+          slides.push({ type: 'image', content: reader.result });
+          idx = slides.length - 1; saveSlides(); render(); fileInput.value = '';
+        };
+        reader.onerror = () => { showMsgToast('读取图片失败'); fileInput.value = ''; };
+        reader.readAsDataURL(f);
+      });
+    }
+    if (delBtn) delBtn.addEventListener('click', () => {
+      if (!confirm('确定删除当前幻灯片吗？此操作不可撤销。')) return;
+      slides.splice(idx, 1);
+      if (idx >= slides.length) idx = Math.max(0, slides.length - 1);
+      if (!slides.length) { slides = [{ type: 'text', content: '（空白幻灯片）' }]; idx = 0; }
+      saveSlides(); render();
+    });
+
+    // export/import
+    if (exportBtn) exportBtn.addEventListener('click', () => {
+      try {
+        const blob = new Blob([JSON.stringify(slides)], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pptlou.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+      } catch (e) { showMsgToast('导出失败：' + e.message); }
+    });
+    if (importBtn && importFile) {
+      importBtn.addEventListener('click', () => importFile.click());
+      importFile.addEventListener('change', () => {
+        const f = importFile.files && importFile.files[0];
+        if (!f) return; const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const parsed = JSON.parse(reader.result);
+            if (!Array.isArray(parsed)) throw new Error('格式不正确');
+            // basic validation
+            const ok = parsed.every(it => it && (it.type === 'text' || it.type === 'image') && typeof it.content === 'string');
+            if (!ok) throw new Error('内容不符合预期');
+            slides = parsed; idx = 0; saveSlides(); render(); importFile.value = '';
+            showMsgToast('导入成功，已加载 ' + slides.length + ' 张幻灯片');
+          } catch (e) { showMsgToast('导入失败：' + e.message); importFile.value = ''; }
+        };
+        reader.onerror = () => { showMsgToast('读取文件失败'); importFile.value = ''; };
+        reader.readAsText(f);
+      });
+    }
+  }
+
   WM.open('home');
 
 })();

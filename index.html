@@ -72,7 +72,7 @@
   </section>
 
   <!-- 论坛分区 -->
-  <section class="window" id="forums" data-title="论坛分区" data-icon="📂" style="width:520px">
+  <section class="window" id="forums" data-title="论坛分区" data-icon="📂" style="width:700px;height:520px">
     <div class="titlebar">
       <span class="ico">📂</span>
       <span class="title">论坛分区 — Lunahub</span>
@@ -113,6 +113,48 @@
         <span class="back" id="topicBack">← 返回话题列表</span>
         <div id="topicDetailBody"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- 新增应用：计算器、PowerPoint (lou 版) -->
+  <section class="window" id="calculator" data-title="计算器" data-icon="🧮" style="width:320px;height:360px">
+    <div class="titlebar">
+      <span class="ico">🧮</span>
+      <span class="title">计算器 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody calc-body">
+      <div class="calc-display"><input id="calcDisplay" readonly></div>
+      <div class="calc-keys" id="calcKeys">
+        <button>7</button><button>8</button><button>9</button><button>/</button>
+        <button>4</button><button>5</button><button>6</button><button>*</button>
+        <button>1</button><button>2</button><button>3</button><button>-</button>
+        <button>0</button><button>.</button><button>=</button><button>+</button>
+        <button class="wide" id="calcClear">C</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="window" id="pptlou" data-title="PowerPoint (lou 版)" data-icon="📽️" style="width:640px;height:460px">
+    <div class="titlebar">
+      <span class="ico">📽️</span>
+      <span class="title">PowerPoint (lou 版) — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody ppt-body">
+      <div class="ppt-toolbar">
+        <button class="xp-btn small" id="pptPrev">上一页</button>
+        <button class="xp-btn small" id="pptNext">下一页</button>
+        <button class="xp-btn small" id="pptNew">新建幻灯片</button>
+        <button class="xp-btn small" id="pptImg">插入图片</button>
+        <button class="xp-btn small danger" id="pptDel">删除当前</button>
+        <button class="xp-btn small" id="pptExport">导出</button>
+        <button class="xp-btn small" id="pptImport">导入</button>
+        <input type="file" id="pptFile" accept="image/*" style="display:none">
+        <input type="file" id="pptImportFile" accept="application/json" style="display:none">
+      </div>
+      <div id="pptSlide" class="ppt-slide">（空白幻灯片）</div>
+      <div id="pptThumbs" class="ppt-thumbs"></div>
     </div>
   </section>
 
@@ -166,7 +208,7 @@
   </section>
 
   <!-- 画廊 -->
-  <section class="window" id="gallery" data-title="画廊精选" data-icon="🖼️" style="width:420px">
+  <section class="window" id="gallery" data-title="画廊精选" data-icon="🖼️" style="width:720px;height:480px">
     <div class="titlebar">
       <span class="ico">🖼️</span>
       <span class="title">画廊精选 — Lunahub</span>
@@ -577,6 +619,7 @@
     </div>
     <div class="sm-foot">
       <button class="xp-btn small" id="smLogin">登录</button>
+      <button class="xp-btn small" id="smGuest">作为访客登录</button>
       <button class="xp-btn small" id="smShut">关机</button>
     </div>
   </div>
@@ -706,6 +749,8 @@
       <a class="ql" data-open="forums" title="论坛">📂</a>
       <a class="ql" data-open="topics" title="论坛">💬</a>
       <a class="ql" data-open="gallery" title="画廊">🖼️</a>
+      <a class="ql" data-open="calculator" title="计算器">🧮</a>
+      <a class="ql" data-open="pptlou" title="PowerPoint (lou)">📽️</a>
       <a class="ql" data-open="donate" title="捐赠">💝</a>
       <a class="ql" data-open="about" title="关于">🛖</a>
     </div>
