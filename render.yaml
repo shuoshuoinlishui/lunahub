@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: lunahub
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: FORUM_SECRET
+        generateValue: true
