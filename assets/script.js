@@ -24,12 +24,63 @@
     paint:   { icon: '🎨', title: 'Luna画图' },
     pointer: { icon: '🖍️', title: '电子教鞭' },
     calculator: { icon: '🧮', title: '计算器' },
-    pptlou: { icon: '📽️', title: 'PowerPoint (lou 版)' },
+    pptlou: { icon: '📽️', title: 'PowerPoint' },
+    excel:   { icon: '📊', title: 'Excel' },
+    whack:   { icon: '🐹', title: '打地鼠' },
+    memo:    { icon: '🃏', title: '记忆翻牌' },
+    gomoku:  { icon: '⚫', title: '五子棋' },
+    go:      { icon: '⚫', title: 'Luna围棋大师' },
+    tictactoe:{ icon: '🔲', title: '井字棋' },
+    convert: { icon: '🔁', title: '单位换算' },
+    calendar:{ icon: '📅', title: '日历' },
+    help:    { icon: '📖', title: '使用说明' },
     appearance: { icon: '🎨', title: '外观和个性化' },
     control:    { icon: '🛠️', title: '控制面板' },
     account:    { icon: '👤', title: '用户账户' },
     admin:     { icon: '🛡️', title: '管理后台' }
   };
+
+  /* ---------- 桌面应用清单（管理员可在后台控制显示/隐藏） ---------- */
+  const DESK_APPS = [
+    { id: 'home',      icon: '🖥️', title: '我的电脑' },
+    { id: 'browser',   icon: '🌐', title: 'Internet Explorer' },
+    { id: 'pptlou',    icon: '📽️', title: 'PowerPoint' },
+    { id: 'excel',     icon: '📊', title: 'Excel' },
+    { id: 'notepad',   icon: '📝', title: '记事本' },
+    { id: 'mines',     icon: '💣', title: '扫雷' },
+    { id: 'music',     icon: '🎵', title: 'Luna媒体播放 器' },
+    { id: 'photos',    icon: '📷', title: 'Luna照片查看器' },
+    { id: 'gallery',   icon: '🖼️', title: '画廊精选' },
+    { id: 'paint',     icon: '🎨', title: 'Luna画图' },
+    { id: 'pointer',   icon: '🖍️', title: '电子教鞭' },
+    { id: 'forums',    icon: '📂', title: '论坛分区' },
+    { id: 'donate',    icon: '💝', title: '捐赠支持' },
+    { id: 'calendar',  icon: '📅', title: '日历' },
+    { id: 'whack',     icon: '🐹', title: '打地鼠' },
+    { id: 'memo',      icon: '🃏', title: '记忆翻牌' },
+    { id: 'gomoku',    icon: '⚫', title: '五子棋' },
+    { id: 'go',        icon: '⚫', title: 'Luna围棋大师' },
+    { id: 'tictactoe', icon: '🔲', title: '井字棋' },
+    { id: 'convert',   icon: '🔁', title: '单位换算' }
+  ];
+  const DESK_KEY = 'lunahub_deskapps';
+  function loadDeskApps() {
+    try { const s = JSON.parse(localStorage.getItem(DESK_KEY)); if (Array.isArray(s) && s.length) return new Set(s); } catch (e) {}
+    return new Set(DESK_APPS.map(a => a.id));
+  }
+  function saveDeskApps(set) { try { localStorage.setItem(DESK_KEY, JSON.stringify([...set])); } catch (e) {} }
+  function renderDesktopIcons() {
+    if (!deskIcons) return;
+    const enabled = loadDeskApps();
+    deskIcons.querySelectorAll('[data-deskapp]').forEach(el => el.remove());
+    DESK_APPS.forEach(a => {
+      if (!enabled.has(a.id)) return;
+      const b = document.createElement('button');
+      b.className = 'dico'; b.dataset.app = a.id; b.dataset.deskapp = '1';
+      b.innerHTML = '<span class="di-ico">' + a.icon + '</span><span class="di-txt">' + a.title + '</span>';
+      deskIcons.appendChild(b);
+    });
+  }
 
   /* ---------- 窗口对象 ---------- */
   class Win {
@@ -111,6 +162,8 @@
         if (WM.active === this.id) this.minimize();
         else WM.focus(this.id);
       });
+      b.addEventListener('mouseenter', () => { if (__tpTimer) { clearTimeout(__tpTimer); __tpTimer = null; } showTaskPreview(this, b); });
+      b.addEventListener('mouseleave', () => { __tpTimer = setTimeout(hideTaskPreview, 160); });
       running.appendChild(b);
       this.taskBtn = b;
     }
@@ -142,25 +195,88 @@
       WM.focus(this.id);
     }
 
+    shakeOthers() {
+      if (!document.body.classList.contains('theme-aero')) return;
+      const others = Object.values(WM.wins).filter(o => o.id !== this.id && !o.el.classList.contains('closed'));
+      if (others.length) {
+        others.forEach(o => o.minimize());
+      } else {
+        Object.values(WM.wins).forEach(o => {
+          if (o.id !== this.id && o.taskBtn && o.taskBtn.style.display !== 'none' && o.el.classList.contains('closed')) o.open();
+        });
+      }
+    }
+
     startDrag(e) {
       if (e.target.closest('.wb')) return;
       if (this.el.classList.contains('maximized')) return;
       WM.focus(this.id);
       this.el.classList.add('dragging');
+      this.el.classList.remove('snapped');
       const r = this.el.getBoundingClientRect();
       const offX = e.clientX - r.left, offY = e.clientY - r.top;
-      const dh = desktop.clientHeight - taskbarH;
+      const dw = desktop.clientWidth, dh = desktop.clientHeight - taskbarH;
+      const aero = document.body.classList.contains('theme-aero');
+      let preview = null;
+      // —— Aero Shake：拖拽时左右反复甩动 → 最小化/恢复其余窗口 ——
+      let shakePrevX = e.clientX, shakeLastDir = 0, shakeAccum = 0, shakeReversals = 0, shakeTotal = 0, shook = false;
+      const getSnap = (x, y) => {
+        if (y <= 24) return 'top';
+        if (x <= 24) return 'left';
+        if (x >= dw - 24) return 'right';
+        return null;
+      };
+      const showPreview = zone => {
+        if (!aero) return;
+        if (!zone) { if (preview) preview.style.display = 'none'; return; }
+        if (!preview) { preview = document.createElement('div'); preview.id = 'snapPreview'; document.body.appendChild(preview); }
+        preview.style.display = 'block';
+        if (zone === 'left') preview.style.cssText = 'display:block;left:0;top:0;width:' + (dw / 2) + 'px;height:' + dh + 'px';
+        else if (zone === 'right') preview.style.cssText = 'display:block;left:' + (dw / 2) + 'px;top:0;width:' + (dw / 2) + 'px;height:' + dh + 'px';
+        else preview.style.cssText = 'display:block;left:0;top:0;width:' + dw + 'px;height:' + dh + 'px';
+      };
       const move = ev => {
         let x = ev.clientX - offX, y = ev.clientY - offY;
         x = Math.max(-r.width + 60, Math.min(x, desktop.clientWidth - 60));
         y = Math.max(0, Math.min(y, dh - 28));
         this.el.style.left = x + 'px';
         this.el.style.top = y + 'px';
+        // Aero Shake 检测（仅 Aero 主题生效）
+        if (aero && !shook) {
+          const dx = ev.clientX - shakePrevX; shakePrevX = ev.clientX;
+          if (dx !== 0) {
+            const d = dx > 0 ? 1 : -1;
+            if (shakeLastDir !== 0 && d !== shakeLastDir) {
+              if (shakeAccum > 28) shakeReversals++;
+              shakeAccum = 0;
+            }
+            shakeLastDir = d;
+            shakeAccum += Math.abs(dx);
+            shakeTotal += Math.abs(dx);
+            if (shakeReversals >= 2 && shakeTotal > 110) { shook = true; this.shakeOthers(); }
+          }
+        }
+        showPreview(getSnap(ev.clientX, ev.clientY));
       };
-      const up = () => {
+      const up = ev => {
         this.el.classList.remove('dragging');
         document.removeEventListener('pointermove', move);
         document.removeEventListener('pointerup', up);
+        const zone = aero ? getSnap(ev.clientX, ev.clientY) : null;
+        if (preview) preview.remove();
+        if (!zone) return;
+        this.prevRect = { left: this.el.style.left, top: this.el.style.top, width: this.el.style.width, height: this.el.style.height };
+        if (zone === 'top') {
+          this.el.classList.add('maximized');
+        } else {
+          this.el.classList.remove('maximized');
+          const half = Math.floor(dw / 2);
+          this.el.style.top = '0px';
+          this.el.style.height = dh + 'px';
+          if (zone === 'left') { this.el.style.left = '0px'; this.el.style.width = half + 'px'; }
+          else { this.el.style.left = half + 'px'; this.el.style.width = (dw - half) + 'px'; }
+          this.el.classList.add('snapped');
+        }
       };
       document.addEventListener('pointermove', move);
       document.addEventListener('pointerup', up);
@@ -228,6 +344,49 @@
     }
   };
 
+  /* Aero 任务栏悬停缩略图预览（Win7 风格） */
+  let __tp = null, __tpTimer = null;
+  function hideTaskPreview() {
+    if (__tp) { __tp.remove(); __tp = null; }
+    if (__tpTimer) { clearTimeout(__tpTimer); __tpTimer = null; }
+  }
+  function showTaskPreview(win, btn) {
+    hideTaskPreview();
+    if (!document.body.classList.contains('theme-aero')) return;
+    if (win.el.classList.contains('closed')) return;
+    const W = win.el.offsetWidth || 420, H = win.el.offsetHeight || 300;
+    const scale = Math.min(0.28, 240 / W);
+    const pw = Math.max(160, Math.round(W * scale)), ph = Math.round(H * scale);
+    const preview = document.createElement('div');
+    preview.className = 'task-preview';
+    const wrap = document.createElement('div');
+    wrap.className = 'tp-wrap';
+    wrap.style.width = pw + 'px'; wrap.style.height = ph + 'px';
+    const clone = win.el.cloneNode(true);
+    clone.classList.remove('closed', 'active', 'dragging', 'snapped', 'maximized');
+    clone.style.cssText += ';position:relative;left:0;top:0;margin:0;width:' + W + 'px;height:' + H + 'px;transform:scale(' + scale + ');transform-origin:top left;pointer-events:none;box-shadow:none;';
+    clone.querySelectorAll('video,audio').forEach(m => { try { m.pause(); } catch (e) {} m.removeAttribute('autoplay'); });
+    wrap.appendChild(clone);
+    preview.appendChild(wrap);
+    const cap = document.createElement('div');
+    cap.className = 'tp-cap';
+    cap.textContent = win.title;
+    preview.appendChild(cap);
+    document.body.appendChild(preview);
+    __tp = preview;
+    const rb = btn.getBoundingClientRect();
+    let left = rb.left + rb.width / 2 - pw / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - pw - 16));
+    preview.style.left = left + 'px';
+    preview.style.top = (rb.top - ph - 34) + 'px';
+    preview.addEventListener('mouseenter', () => { if (__tpTimer) { clearTimeout(__tpTimer); __tpTimer = null; } });
+    preview.addEventListener('mouseleave', () => { __tpTimer = setTimeout(hideTaskPreview, 160); });
+    preview.addEventListener('click', () => {
+      if (win.el.classList.contains('closed')) win.open(); else WM.focus(win.id);
+      hideTaskPreview();
+    });
+  }
+
   Object.keys(APPS).forEach(id => WM.register(id));
 
   // 轻量提示气泡（控制面板“日期和时间”等用）
@@ -270,17 +429,20 @@
     });
   });
 
-  const dicos = document.querySelectorAll('.dico');
-  dicos.forEach(d => {
-    d.addEventListener('click', () => {
-      dicos.forEach(x => x.classList.remove('sel'));
-      d.classList.add('sel');
-    });
-    d.addEventListener('dblclick', () => WM.open(d.dataset.app));
+  const deskIcons = document.getElementById('deskIcons');
+  deskIcons.addEventListener('click', e => {
+    const di = e.target.closest('.dico'); if (!di) return;
+    document.querySelectorAll('.dico').forEach(x => x.classList.remove('sel'));
+    di.classList.add('sel');
+  });
+  deskIcons.addEventListener('dblclick', e => {
+    const di = e.target.closest('.dico'); if (!di) return;
+    WM.open(di.dataset.app);
   });
   desktop.addEventListener('click', e => {
-    if (e.target === desktop) dicos.forEach(x => x.classList.remove('sel'));
+    if (e.target === desktop) document.querySelectorAll('.dico').forEach(x => x.classList.remove('sel'));
   });
+  renderDesktopIcons();
 
   /* ---------- 开始菜单 ---------- */
   const startBtn = document.getElementById('startBtn');
@@ -293,6 +455,25 @@
   });
   document.addEventListener('click', e => {
     if (!startMenu.hidden && !startMenu.contains(e.target) && e.target !== startBtn) closeStart();
+  });
+
+  /* ---------- 开始菜单「所有程序」折叠 ---------- */
+  const smAllProgBtn = document.getElementById('smAllProgBtn');
+  const smPinned = document.getElementById('smPinned');
+  const smAllProg = document.getElementById('smAllProg');
+  if (smAllProgBtn) {
+    smAllProgBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const expanded = smAllProgBtn.classList.toggle('expanded');
+      smPinned.hidden = expanded;
+      smAllProg.hidden = !expanded;
+    });
+  }
+  document.querySelectorAll('.sm-folder-head').forEach(h => {
+    h.addEventListener('click', e => {
+      e.stopPropagation();
+      h.parentElement.classList.toggle('open');
+    });
   });
 
   /* ---------- 登录系统（带本地持久化） ---------- */
@@ -468,31 +649,71 @@
 
   // 关机（经典 XP 关机体验）
   const smShut = document.getElementById('smShut');
-  const smGuest = document.getElementById('smGuest');
-  function shutdown() {
-    Object.values(WM.wins).forEach(w => w.el.classList.add('closed'));
-    if (loggedIn) doLogout();
+  function shutdown() { showShutdownChoice(); }
+  function sdScreen(cls) {
     const s = document.createElement('div');
-    s.className = 'shutdown-screen';
-    s.innerHTML = '<div class="sd-inner"><div class="sd-logo">⏻</div><div>Windows 正在关机…</div></div>';
+    s.className = 'shutdown-screen' + (cls ? ' ' + cls : '');
     document.body.appendChild(s);
     requestAnimationFrame(() => s.classList.add('show'));
-    setTimeout(() => { s.innerHTML = '<div class="sd-safe">可以安全地关闭计算机了。</div>'; }, 2600);
-    s.addEventListener('click', () => {
+    return s;
+  }
+  function showShutdownChoice() {
+    closeStart();
+    Object.values(WM.wins).forEach(w => w.el.classList.add('closed'));
+    const s = sdScreen('sd-choice');
+    s.innerHTML =
+      '<div class="sd-choice-inner">' +
+        '<div class="sd-choice-logo">⏻</div>' +
+        '<div class="sd-choice-title">Windows XP</div>' +
+        '<div class="sd-choice-sub">您希望计算机做什么？</div>' +
+        '<div class="sd-choice-btns">' +
+          '<button class="sd-opt" data-act="poweroff"><span class="sd-ico">⏻</span>关机<span class="sd-sub2">退出账号</span></button>' +
+          '<button class="sd-opt" data-act="restart"><span class="sd-ico">🔄</span>重启</button>' +
+          '<button class="sd-opt" data-act="sleep"><span class="sd-ico">💤</span>睡眠</button>' +
+        '</div>' +
+      '</div>';
+    s.querySelectorAll('.sd-opt').forEach(b => b.addEventListener('click', () => {
+      const act = b.dataset.act;
+      if (act === 'poweroff') powerOff();
+      else if (act === 'restart') restart();
+      else if (act === 'sleep') sleep();
+    }));
+  }
+  function powerOff() {
+    const old = document.querySelector('.shutdown-screen'); if (old) old.remove();
+    if (loggedIn) doLogout();
+    playSound(shutdownSoundUrl);
+    const s = sdScreen();
+    s.innerHTML = '<div class="sd-inner"><div class="sd-logo">⏻</div><div>Windows 正在关机…</div></div>';
+    setTimeout(() => { s.innerHTML = '<div class="sd-safe">现在可以安全地关闭计算机了。</div>'; }, 2200);
+    s.addEventListener('click', () => { s.classList.remove('show'); setTimeout(() => { s.remove(); WM.open('home'); }, 450); });
+  }
+  function restart() {
+    const old = document.querySelector('.shutdown-screen'); if (old) old.remove();
+    const s = sdScreen();
+    s.innerHTML = '<div class="sd-inner"><div class="sd-logo">⏻</div><div>Windows 正在重启…</div></div>';
+    setTimeout(() => {
       s.classList.remove('show');
-      setTimeout(() => { s.remove(); WM.open('home'); }, 450);
-    });
+      setTimeout(() => {
+        s.remove();
+        const b = document.createElement('div');
+        b.className = 'boot-screen';
+        b.innerHTML = '<div class="bs-inner"><div class="bs-logo">Windows XP</div><div class="bs-tip">正在启动 Lunahub…</div></div>';
+        document.body.appendChild(b);
+        requestAnimationFrame(() => b.classList.add('show'));
+        playSound(bootSoundUrl);
+        b.addEventListener('click', () => { b.classList.remove('show'); setTimeout(() => { b.remove(); WM.open('home'); }, 480); });
+        setTimeout(() => { b.classList.remove('show'); setTimeout(() => { b.remove(); WM.open('home'); }, 480); }, 2000);
+      }, 450);
+    }, 1800);
+  }
+  function sleep() {
+    const old = document.querySelector('.shutdown-screen'); if (old) old.remove();
+    const sl = sdScreen('sleep-screen');
+    sl.innerHTML = '<div class="sd-inner"><div class="sd-logo">💤</div><div>计算机已处于睡眠状态</div><div class="sd-safe2">点击任意位置唤醒</div></div>';
+    sl.addEventListener('click', () => { sl.classList.remove('show'); setTimeout(() => sl.remove(), 400); });
   }
   if (smShut) smShut.addEventListener('click', e => { e.preventDefault(); closeStart(); shutdown(); });
-  if (smGuest) smGuest.addEventListener('click', e => {
-    e.preventDefault();
-    closeStart();
-    // guest login as 'user' without backend
-    loggedIn = true; authRole = 'user'; authToken = null;
-    try { localStorage.setItem(SAVE_KEY, 'user'); } catch (e) {}
-    setUserUI('user');
-    showMsgToast('已以访客 user 登录');
-  });
   loginOverlay.addEventListener('click', e => { if (e.target === loginOverlay) closeLogin(); });
   loginUser.addEventListener('keydown', e => { if (e.key === 'Enter') loginPass.focus(); });
   loginPass.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -565,6 +786,11 @@
       el.innerHTML = '<span class="ann-ico">📢</span><div class="ann-text"><b>' + esc(a.title) + '</b>' +
         (a.body ? ' — ' + esc(a.body) : '') +
         '<div class="ann-meta">by ' + esc(a.author || '管理员') + ' · ' + fmtDate(a.createdAt) + '</div></div>';
+      if (isAdmin()) {
+        const del = document.createElement('button'); del.className = 'ann-del'; del.type = 'button'; del.title = '删除公告'; del.textContent = '✕';
+        del.addEventListener('click', () => adminDeleteAnnouncement(a.id));
+        el.appendChild(del);
+      }
       annBar.appendChild(el);
     });
   }
@@ -647,6 +873,11 @@
           '<span class="ft-num">' + rc + '</span>' +
           '<span class="ft-last">' + (last ? '<b>' + esc(last.title) + '</b><span class="ft-last-sub">by ' + esc(last.author) + ' · ' + fmtRelative(last.createdAt) + '</span>' : '— 暂无 —') + '</span>';
         row.addEventListener('click', () => openTopicCategory(cat));
+        if (isAdmin()) {
+          const del = document.createElement('button'); del.className = 'ft-del'; del.type = 'button'; del.title = '删除板块'; del.textContent = '✕';
+          del.addEventListener('click', e => { e.stopPropagation(); adminDeleteCategory(cat); });
+          row.appendChild(del);
+        }
         tbl.appendChild(row);
       });
       grp.appendChild(tbl);
@@ -697,7 +928,9 @@
       pin.addEventListener('click', e => { e.stopPropagation(); adminPin(t.id, !t.pinned); });
       const hid = document.createElement('button'); hid.className = 'mini-btn'; hid.textContent = t.hidden ? '取消隐藏' : '隐藏';
       hid.addEventListener('click', e => { e.stopPropagation(); adminHide(t.id, !t.hidden); });
-      ad.appendChild(pin); ad.appendChild(hid);
+      const del = document.createElement('button'); del.className = 'mini-btn danger'; del.textContent = '删除';
+      del.addEventListener('click', e => { e.stopPropagation(); adminDeleteTopic(t.id); });
+      ad.appendChild(pin); ad.appendChild(hid); ad.appendChild(del);
       right.appendChild(ad);
     }
     li.appendChild(right);
@@ -720,6 +953,21 @@
   async function adminHide(id, hidden) {
     try { await api('POST', '/api/admin/topics/' + encodeURIComponent(id) + '/hide', { hidden }); loadForum(); }
     catch (e) { showMsgToast('操作失败：' + e.message); }
+  }
+  async function adminDeleteTopic(id) {
+    if (!confirm('确定删除该话题吗？此操作不可恢复。')) return;
+    try { await api('POST', '/api/admin/topics/' + encodeURIComponent(id) + '/delete'); showMsgToast('已删除话题'); loadForum(); }
+    catch (e) { showMsgToast('删除失败：' + e.message); }
+  }
+  async function adminDeleteAnnouncement(id) {
+    if (!confirm('确定删除该公告吗？此操作不可恢复。')) return;
+    try { await api('POST', '/api/announcements/' + encodeURIComponent(id) + '/delete'); showMsgToast('已删除公告'); loadForum(); }
+    catch (e) { showMsgToast('删除失败：' + e.message); }
+  }
+  async function adminDeleteCategory(cat) {
+    if (!confirm('确定删除板块「' + cat + '」吗？\n该板块下的话题不会被删除，会归入「其它」板块。')) return;
+    try { await api('POST', '/api/admin/categories/' + encodeURIComponent(cat) + '/delete'); showMsgToast('已删除板块：' + cat); loadForum(); }
+    catch (e) { showMsgToast('删除失败：' + e.message); }
   }
 
   async function openTopic(id) {
@@ -757,7 +1005,9 @@
       pin.addEventListener('click', () => adminPin(t.id, !t.pinned).then(() => openTopic(id)));
       const hid = document.createElement('button'); hid.className = 'mini-btn'; hid.textContent = t.hidden ? '取消隐藏' : '隐藏';
       hid.addEventListener('click', () => adminHide(t.id, !t.hidden).then(() => openTopic(id)));
-      ad.appendChild(pin); ad.appendChild(hid); head.appendChild(ad);
+      const del = document.createElement('button'); del.className = 'mini-btn danger'; del.textContent = '删除';
+      del.addEventListener('click', () => adminDeleteTopic(t.id));
+      ad.appendChild(pin); ad.appendChild(hid); ad.appendChild(del); head.appendChild(ad);
     }
     body.appendChild(head);
 
@@ -884,6 +1134,10 @@
     atabs.forEach(x => x.classList.remove('active')); t.classList.add('active');
     document.getElementById('adminUsersView').hidden = t.dataset.tab !== 'users';
     document.getElementById('adminAnnView').hidden = t.dataset.tab !== 'ann';
+    const sv = document.getElementById('adminSoundView'); if (sv) sv.hidden = t.dataset.tab !== 'sound';
+    const dv = document.getElementById('adminDeskView'); if (dv) dv.hidden = t.dataset.tab !== 'desk';
+    if (t.dataset.tab === 'sound') refreshSoundStatus();
+    if (t.dataset.tab === 'desk') renderDeskManage();
   }));
 
   async function openAdmin() {
@@ -907,6 +1161,14 @@
           try { await api('POST', '/api/admin/users/' + encodeURIComponent(u.user) + '/role', { role: u.role === 'admin' ? 'user' : 'admin' }); loadAdminUsers(); }
           catch (e) { showMsgToast('操作失败：' + e.message); }
         });
+        const pwdBtn = document.createElement('button'); pwdBtn.className = 'mini-btn'; pwdBtn.textContent = '重置密码';
+        pwdBtn.addEventListener('click', async () => {
+          const np = prompt('为 “' + u.user + '” 设置新密码（至少 6 位）：');
+          if (!np) return;
+          if (np.length < 6) { showMsgToast('密码至少 6 位'); return; }
+          try { await api('POST', '/api/admin/users/' + encodeURIComponent(u.user) + '/password', { pass: np }); showMsgToast('已为 ' + u.user + ' 重置密码'); }
+          catch (e) { showMsgToast('操作失败：' + e.message); }
+        });
         const delBtn = document.createElement('button'); delBtn.className = 'mini-btn danger'; delBtn.textContent = '删除';
         delBtn.addEventListener('click', async () => {
           if (!confirm('确定删除用户 “' + u.user + '” 吗？此操作不可恢复。')) return;
@@ -914,7 +1176,7 @@
           catch (e) { showMsgToast('操作失败：' + e.message); }
         });
         if (u.user === currentUser()) { delBtn.disabled = true; delBtn.title = '不能删除自己'; }
-        acts.appendChild(roleBtn); acts.appendChild(delBtn);
+        acts.appendChild(roleBtn); acts.appendChild(pwdBtn); acts.appendChild(delBtn);
         row.appendChild(info); row.appendChild(acts);
         adminUserList.appendChild(row);
       });
@@ -932,6 +1194,79 @@
     } catch (e) { showMsgToast('发布失败：' + e.message); }
     finally { annSubmit.disabled = false; }
   });
+
+  /* ---------- 管理后台：桌面应用管理 ---------- */
+  function renderDeskManage() {
+    const list = document.getElementById('deskAppList');
+    if (!list) return;
+    const enabled = loadDeskApps();
+    list.innerHTML = '';
+    DESK_APPS.forEach(a => {
+      const row = document.createElement('label');
+      row.className = 'desk-app-item';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = enabled.has(a.id);
+      cb.addEventListener('change', () => {
+        const set = loadDeskApps();
+        if (cb.checked) set.add(a.id); else set.delete(a.id);
+        saveDeskApps(set);
+        renderDesktopIcons();
+      });
+      const txt = document.createElement('span');
+      txt.innerHTML = '<span class="di-ico">' + a.icon + '</span> ' + a.title;
+      row.appendChild(cb); row.appendChild(txt);
+      list.appendChild(row);
+    });
+  }
+
+  /* ---------- 管理后台：系统音效（开机 / 关机） ---------- */
+  async function refreshSoundStatus() {
+    try {
+      const d = await api('GET', '/api/sounds');
+      const bs = document.getElementById('sndBootStatus'), bd = document.getElementById('sndBootDel');
+      const ss = document.getElementById('sndShutStatus'), sd = document.getElementById('sndShutDel');
+      if (bs) bs.textContent = d.boot ? '已设置' : '未设置';
+      if (bd) bd.hidden = !d.boot;
+      if (ss) ss.textContent = d.shutdown ? '已设置' : '未设置';
+      if (sd) sd.hidden = !d.shutdown;
+    } catch (e) {}
+  }
+  function wireSoundSlot(slot, btnId, fileId, statusId, delId) {
+    const btn = document.getElementById(btnId);
+    const file = document.getElementById(fileId);
+    const status = document.getElementById(statusId);
+    const del = document.getElementById(delId);
+    if (!btn || !file) return;
+    btn.addEventListener('click', () => file.click());
+    file.addEventListener('change', () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      if (f.size > 5 * 1024 * 1024) { showMsgToast('音效文件超过 5MB'); file.value = ''; return; }
+      const rd = new FileReader();
+      rd.onload = async () => {
+        try {
+          await api('POST', '/api/admin/sound', { slot, data: rd.result });
+          showMsgToast((slot === 'boot' ? '开机' : '关机') + '音效已设置');
+          file.value = '';
+          if (status) status.textContent = '已设置：' + (f.name || '');
+          if (del) del.hidden = false;
+          loadSoundsConfig();
+        } catch (e) { showMsgToast('上传失败：' + e.message); file.value = ''; }
+      };
+      rd.readAsDataURL(f);
+    });
+    if (del) del.addEventListener('click', async () => {
+      try {
+        await api('POST', '/api/admin/sound/' + slot + '/delete');
+        if (status) status.textContent = '未设置';
+        del.hidden = true;
+        showMsgToast('已删除' + (slot === 'boot' ? '开机' : '关机') + '音效');
+        loadSoundsConfig();
+      } catch (e) { showMsgToast('删除失败：' + e.message); }
+    });
+  }
+  wireSoundSlot('boot', 'sndBootBtn', 'sndBootFile', 'sndBootStatus', 'sndBootDel');
+  wireSoundSlot('shutdown', 'sndShutBtn', 'sndShutFile', 'sndShutStatus', 'sndShutDel');
 
   // WM.open 覆盖在浏览器模块中统一处理
 
@@ -1003,7 +1338,8 @@
     { id: 'sepia',    name: '达芬奇棕',     c1: '#a0622a', c2: '#6a3e14' },
     { id: 'midnight', name: '午夜蓝',       c1: '#1a2a5a', c2: '#0a1a4a' },
     { id: 'aquarium', name: '水族馆蓝',     c1: '#3aa8d0', c2: '#1a6a8a' },
-    { id: 'classic',  name: 'Windows 经典', c1: '#d4d0c8', c2: '#b8b4a4' }
+    { id: 'classic',  name: 'Windows 经典', c1: '#d4d0c8', c2: '#b8b4a4' },
+    { id: 'aero',     name: 'Aero 玻璃蓝',   c1: '#5a9be0', c2: '#1e63b0' }
   ];
   // 一键主题（点一下同时应用：壁纸 + 标题栏/任务栏色 + 字体大小）
   // 命名严格对齐 Windows XP 真实预制主题：亮蓝色 / Windows 经典 / Plus! 系列
@@ -1014,7 +1350,8 @@
     { id: 'plus-space',     name: 'Plus! 太空',        wp: 'space',        accent: 'mce',      fs: 'md', desc: 'Plus! 太空遨游' },
     { id: 'plus-aquarium',  name: 'Plus! 水族馆',      wp: 'aquarium',     accent: 'aquarium', fs: 'md', desc: 'Plus! 水族馆' },
     { id: 'plus-freestyle', name: 'Plus! Freestyle',   wp: 'freestyle',    accent: 'midnight', fs: 'md', desc: 'MCE 2005 自由风' },
-    { id: 'classic',        name: 'Windows 经典',      wp: 'luna',         accent: 'classic',  fs: 'md', desc: 'Windows 9x 风格灰色' }
+    { id: 'classic',        name: 'Windows 经典',      wp: 'luna',         accent: 'classic',  fs: 'md', desc: 'Windows 9x 风格灰色' },
+    { id: 'aero',           name: 'Windows Aero',      wp: 'ocean',        accent: 'aero',     fs: 'md', desc: 'Windows 7 玻璃拟态' }
   ];
 
   // 当前选中的壁纸（含用户上传）—— 用 localStorage 记住时也可还原
@@ -1027,77 +1364,10 @@
     document.querySelectorAll('#wpGrid .wp, #wpUserGrid .wp').forEach(el => el.classList.toggle('sel', el.dataset.id === wp.id));
     document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
   }
-  // color helpers: hex <-> rgb <-> hsl and adjust lightness
-  function hexToRgb(hex) {
-    if (!hex) return null;
-    hex = hex.replace('#','');
-    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
-    const int = parseInt(hex, 16);
-    return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
-  }
-  function rgbToHex(r,g,b) {
-    return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
-  }
-  function rgbToHsl(r,g,b) {
-    r /= 255; g /= 255; b /= 255;
-    const max = Math.max(r,g,b), min = Math.min(r,g,b);
-    let h = 0, s = 0, l = (max + min) / 2;
-    if (max !== min) {
-      const d = max - min;
-      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-      switch (max) {
-        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-        case g: h = (b - r) / d + 2; break;
-        case b: h = (r - g) / d + 4; break;
-      }
-      h /= 6;
-    }
-    return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
-  }
-  function hslToRgb(h,s,l) {
-    h /= 360; s /= 100; l /= 100;
-    let r,g,b;
-    if (s === 0) { r = g = b = l; }
-    else {
-      const hue2rgb = (p, q, t) => {
-        if (t < 0) t += 1; if (t > 1) t -= 1;
-        if (t < 1/6) return p + (q - p) * 6 * t;
-        if (t < 1/2) return q;
-        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-        return p;
-      };
-      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-      const p = 2 * l - q;
-      r = hue2rgb(p, q, h + 1/3);
-      g = hue2rgb(p, q, h);
-      b = hue2rgb(p, q, h - 1/3);
-    }
-    return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
-  }
-  function adjustLightness(hex, deltaPercent) {
-    try {
-      const rgb = hexToRgb(hex);
-      if (!rgb) return hex;
-      const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
-      hsl.l = Math.max(0, Math.min(100, hsl.l + deltaPercent));
-      const nrgb = hslToRgb(hsl.h, hsl.s, hsl.l);
-      return rgbToHex(nrgb.r, nrgb.g, nrgb.b);
-    } catch (e) { return hex; }
-  }
-  function deriveAccent(c1, c2) {
-    // c1/c2 expected as hex (e.g. #3c7fb1)
-    document.documentElement.style.setProperty('--acc1', c1);
-    document.documentElement.style.setProperty('--acc2', c2);
-    // inactive titlebar: slightly lighter
-    document.documentElement.style.setProperty('--acci1', adjustLightness(c1, 14));
-    document.documentElement.style.setProperty('--acci2', adjustLightness(c2, 14));
-    // darker variants for borders/active accents/text
-    document.documentElement.style.setProperty('--accd1', adjustLightness(c1, -18));
-    document.documentElement.style.setProperty('--accd2', adjustLightness(c2, -28));
-  }
 
   function applyAccent(a) {
-    deriveAccent(a.c1, a.c2);
+    document.documentElement.style.setProperty('--acc1', a.c1);
+    document.documentElement.style.setProperty('--acc2', a.c2);
     try { localStorage.setItem('lunahub_accent', a.id); } catch (e) {}
     document.querySelectorAll('#accentGrid .accent').forEach(el => el.classList.toggle('sel', el.dataset.id === a.id));
     document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
@@ -1115,8 +1385,8 @@
     if (ac) applyAccent(ac);
     if (t.fs) applyFontSize(t.fs);
     try { localStorage.setItem('lunahub_theme', t.id); } catch (e) {}
-    if (t.id === 'classic') document.body.classList.add('theme-classic');
-    else document.body.classList.remove('theme-classic');
+    document.body.classList.toggle('theme-classic', t.id === 'classic');
+    document.body.classList.toggle('theme-aero', t.id === 'aero');
     document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.toggle('sel', el.dataset.theme === t.id));
   }
 
@@ -1146,8 +1416,8 @@
       wpUploadBtn.disabled = false; wpUploadBtn.title = '';
       wpExtractBtn.disabled = false;
       wpTip.textContent = isAdminRole()
-        ? '你是管理员：登录后可上传壁纸，可删除任意上传项'
-        : '已登录：可上传壁纸，管理员可删除上传项';
+        ? '你是管理员：可上传壁纸，可删除任意上传项'
+        : '已登录：可上传壁纸，也能删除自己上传的壁纸';
     } else {
       wpUploadBtn.disabled = true; wpUploadBtn.title = '请先登录';
       wpExtractBtn.disabled = false;
@@ -1158,21 +1428,28 @@
 
   function renderUserWPs() {
     wpUserGrid.innerHTML = '';
-    if (!customWPs.length) {
+    if (!loggedIn) {
       const empty = document.createElement('div');
       empty.className = 'wp-empty';
-      empty.textContent = '（还没有上传的壁纸）';
+      empty.textContent = '登录后查看你上传的壁纸';
+      wpUserGrid.appendChild(empty);
+      return;
+    }
+    const mine = customWPs.filter(u => u.uploader === currentUser());
+    if (!mine.length) {
+      const empty = document.createElement('div');
+      empty.className = 'wp-empty';
+      empty.textContent = '（你还没有上传壁纸，点上方「📤 上传壁纸」试试）';
       wpUserGrid.appendChild(empty);
       return;
     }
     const isAdmin = isAdminRole();
-    customWPs.forEach(u => {
+    mine.forEach(u => {
       const el = document.createElement('div');
       el.className = 'wp wp-custom'; el.dataset.id = u.id; el.title = (u.name || '未命名') + ' · 由 ' + u.uploader + ' 上传';
       el.style.background = "url('/assets/wallpapers/user/" + u.file + "') center/cover no-repeat";
-      el.innerHTML = '<span>' + (u.name || '未命名') + '</span>'; // +
-        // (isAdmin ? '<button class="wp-del" title="删除" data-id="' + u.id + '">✕</button>' : '');
-      if (isAdmin) {
+      el.innerHTML = '<span>' + (u.name || '未命名') + '</span>';
+      if (isAdmin || u.uploader === currentUser()) {
         const del = document.createElement('button');
         del.className = 'wp-del'; del.title = '删除'; del.textContent = '✕';
         del.addEventListener('click', async (ev) => {
@@ -1266,13 +1543,12 @@
   });
   wpMenuUploadBtn.addEventListener('click', async () => {
     if (!loggedIn) { showMsgToast('请先登录后再查看我的上传'); return; }
-    wpUserGrid.hidden = !wpUserGrid.hidden;
-    wpMenuUploadBtn.textContent = wpUserGrid.hidden ? '🖼️ 我的上传' : '🖼️ 隐藏我的上传';
-    if (!wpUserGrid.hidden && !customWPs.length) await loadCustomWPs();
+    await loadCustomWPs();
+    if (wpUserGrid.scrollIntoView) wpUserGrid.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
   // 进入外观窗口时（首次）异步拉一次；isAdminRole/UI 变化时 refreshWpUI
   // 暴露给 setUserUI 钩子：登入登出后 UI 状态由 setUserUI 内部刷新
-  window.__lunaRefreshWallpaper = () => { refreshWpUI(); if (!wpUserGrid.hidden) loadCustomWPs(); };
+  window.__lunaRefreshWallpaper = () => { refreshWpUI(); loadCustomWPs(); };
   // 渲染内建壁纸（一次性）
   WALLPAPERS.forEach(wp => {
     const el = document.createElement('div');
@@ -1303,7 +1579,8 @@
       'linear-gradient(180deg,' + (wccC1.value) + ',' + (wccC2.value) + ')';
   }
   function applyCustomAccent(c1, c2) {
-    deriveAccent(c1, c2);
+    document.documentElement.style.setProperty('--acc1', c1);
+    document.documentElement.style.setProperty('--acc2', c2);
     try { localStorage.setItem('lunahub_accent_custom', JSON.stringify({ c1, c2 })); } catch (e) {}
     document.querySelectorAll('#accentGrid .accent').forEach(el => el.classList.remove('sel'));
     document.querySelectorAll('#themeGrid .theme-card').forEach(el => el.classList.remove('sel'));
@@ -1364,6 +1641,45 @@
     btn.addEventListener('click', () => applyFontSize(btn.dataset.fs));
   });
 
+  /* —— 鼠标指针皮肤 —— */
+  function svgCursor(fill, stroke) {
+    const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'>" +
+      "<path d='M4 3 L4 22 L9 17 L12 25 L15 24 L12 16 L20 16 Z' fill='" + fill + "' stroke='" + stroke + "' stroke-width='1.5' stroke-linejoin='round'/></svg>";
+    return "url(\"data:image/svg+xml," + encodeURIComponent(svg).replace(/'/g, '%27') + "\") 3 3, auto";
+  }
+  const CURSORS = [
+    { id: 'default', name: '系统默认', cur: '' },
+    { id: 'blue', name: 'XP 蓝箭头', cur: svgCursor('#2d6cff', '#ffffff') },
+    { id: 'green', name: '绿野箭头', cur: svgCursor('#2ecc40', '#0a3a1a') },
+    { id: 'gold', name: '金黄箭头', cur: svgCursor('#e0a000', '#5a3a00') },
+    { id: 'classic', name: '经典白箭头', cur: svgCursor('#ffffff', '#000000') }
+  ];
+  const cursorGrid = document.getElementById('cursorGrid');
+  function applyCursor(id) {
+    const c = CURSORS.find(x => x.id === id) || CURSORS[0];
+    document.documentElement.style.cursor = c.cur || 'auto';
+    try { localStorage.setItem('lunahub_cursor', id); } catch (e) {}
+    if (cursorGrid) cursorGrid.querySelectorAll('.cursor-opt').forEach(el => el.classList.toggle('sel', el.dataset.id === id));
+  }
+  function initCursor() {
+    let savedCur = null;
+    try { savedCur = localStorage.getItem('lunahub_cursor'); } catch (e) {}
+    if (cursorGrid) {
+      CURSORS.forEach(c => {
+        const el = document.createElement('div'); el.className = 'cursor-opt'; el.dataset.id = c.id; el.title = c.name;
+        el.style.cursor = c.cur || 'default';
+        el.innerHTML = '<span class="co-ico"></span><span class="co-name">' + c.name + '</span>';
+        el.addEventListener('click', () => applyCursor(c.id));
+        cursorGrid.appendChild(el);
+      });
+      applyCursor(savedCur || 'default');
+    } else {
+      const c = CURSORS.find(x => x.id === savedCur) || CURSORS[0];
+      document.documentElement.style.cursor = c.cur || 'auto';
+    }
+  }
+  initCursor();
+
   // 恢复上次的偏好（主题优先 > 自定义颜色 > 预设 > 默认）
   let savedWp = null, savedAc = null, savedFs = null, savedTheme = null, savedCustom = null;
   try {
@@ -1386,7 +1702,8 @@
       // 选中状态高亮 + 恢复主题 class（如经典主题）
       const el = themeGrid.querySelector('[data-theme="' + t.id + '"]');
       if (el) el.classList.add('sel');
-      if (t.id === 'classic') document.body.classList.add('theme-classic');
+      document.body.classList.toggle('theme-classic', t.id === 'classic');
+      document.body.classList.toggle('theme-aero', t.id === 'aero');
     }
   }
 
@@ -2323,7 +2640,8 @@
       muSeeking = false;
     });
     muVol.addEventListener('input', () => { muAudio.volume = muVol.value / 100; });
-    if (muVideo) muVideo.volume = 0.9;
+    muAudio.volume = muVol.value / 100;
+    if (muVideo) muVideo.volume = muVol.value / 100;
   }
 
   /* ---------- Luna照片查看器 ---------- */
@@ -3000,6 +3318,7 @@
     else if (id === 'topics') loadForum();
     else if (id === 'forums') { if (!forumCache) loadForum(); else renderForums(); }
     else if (id === 'admin') openAdmin();
+    else if (id === 'appearance') { if (typeof loadCustomWPs === 'function') loadCustomWPs(); }
     else if (id === 'gallery') loadGallery();
     else if (id === 'account') loadAccount();
     else if (id === 'music') { muRefreshAdminUI(); if (!muMediaLoaded) loadMedia(); }
@@ -3007,6 +3326,14 @@
     else if (id === 'pointer') { ptrOpen(); }
     else if (id === 'calculator') { initCalculator(); }
     else if (id === 'pptlou') { initPptLou(); }
+    else if (id === 'excel') { initExcel(); }
+    else if (id === 'whack') { initWhack(); }
+    else if (id === 'memo') { initMemo(); }
+    else if (id === 'gomoku') { initGomoku(); }
+    else if (id === 'go') { initGo(); }
+    else if (id === 'tictactoe') { initTic(); }
+    else if (id === 'convert') { initConvert(); }
+    else if (id === 'calendar') { initCalendar(); }
     else if (id === 'home') homeShowHero();
   };
   function esc(s) {
@@ -3028,90 +3355,143 @@
   }
   tick(); setInterval(tick, 1000 * 30);
 
+  /* ---------- 系统音效（开机 / 关机） ---------- */
+  let bootSoundUrl = null, shutdownSoundUrl = null;
+  let SYS_VOL = 0.85, SYS_MUTE = false;
+  try {
+    const sv = parseFloat(localStorage.getItem('lunahub_sysvol')); if (!isNaN(sv)) SYS_VOL = sv;
+    if (localStorage.getItem('lunahub_sysmute') === '1') SYS_MUTE = true;
+  } catch (e) {}
+  function sysEffectiveVol() { return SYS_MUTE ? 0 : SYS_VOL; }
+  function playSound(url) {
+    if (!url) return;
+    try { const a = new Audio(url); a.volume = sysEffectiveVol(); const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  }
+  async function loadSoundsConfig() {
+    try { const d = await api('GET', '/api/sounds'); bootSoundUrl = d.boot ||  null; shutdownSoundUrl = d.shutdown || null; } catch (e) {}
+  }
+  loadSoundsConfig();
+
+  /* ---------- 任务栏音量 / 静音（独立窗口） ---------- */
+  (function initTrayVolume() {
+    const muteBtn = document.getElementById('trayMute');
+    if (!muteBtn) return;
+    let lastVol = 80; // 静音前的音量记忆（0-100）
+    function getMuVolEl() { return document.getElementById('muVol'); }
+    function curVol() {
+      if (typeof muAudio !== 'undefined' && muAudio) return Math.round(muAudio.volume * 100);
+      const v = getMuVolEl();
+      return v ? parseInt(v.value, 10) : lastVol;
+    }
+    function applyVol(v) {
+      v = Math.max(0, Math.min(100, Math.round(v)));
+      const aud = (typeof muAudio !== 'undefined') ? muAudio : null;
+      const vEl = getMuVolEl();
+      if (aud) aud.volume = v / 100;
+      if (typeof muVideo !== 'undefined' && muVideo) muVideo.volume = v / 100;
+      if (vEl) vEl.value = v;
+      muteBtn.textContent = v === 0 ? '🔇' : '🔊';
+    }
+    // 任务栏图标点击 → 切换静音（直接作用于媒体播放器）
+    muteBtn.addEventListener('click', () => {
+      if (curVol() > 0) { lastVol = curVol(); applyVol( 0); }
+      else { applyVol(lastVol || 80); }
+    });
+    // 滚轮调节音量（直接作用于媒体播放器）
+    muteBtn.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      applyVol(curVol() + (e.deltaY < 0 ? 6 : -6));
+    }, { passive: false });
+  })();
+
   /* ---------- 启动 ---------- */
   try {
     const u = localStorage.getItem(SAVE_KEY);
     const tk = localStorage.getItem(TOKEN_KEY);
     const rl = localStorage.getItem(ROLE_KEY);
     if (u && tk) { loggedIn = true; authToken = tk; authRole = rl; setUserUI(u); }
-    else if (u && !tk && u === 'user') { /* local guest stored */ loggedIn = true; authRole = 'user'; setUserUI('user'); }
   } catch (e) {}
   updateAuthUI();
   // 校验 token 是否仍然有效，并刷新角色与头像
   if (authToken) {
     api('GET', '/api/me').then(d => { authRole = d.role; setUserUI(currentUser(), d.avatar === undefined ? undefined : (d.avatar || null)); updateAuthUI(); })
-      .catch(() => { /* token 失效，下次操作会提示登录 */ });
+      .catch(() => { /* token 失效：自动登出，下次操作会提示登录 */ doLogout(); });
   }
 
-  // 启动画面（可点击跳过）
+  // 启动画面（可点击跳过）——默认关闭，如需恢复设为 true
+  const SHOW_BOOT = false;
+  if (SHOW_BOOT) {
   (function showBoot() {
     const b = document.createElement('div');
     b.className = 'boot-screen';
     b.innerHTML = '<div class="bs-inner"><div class="bs-logo">Windows XP</div><div class="bs-tip">正在启动 Lunahub…</div></div>';
     document.body.appendChild(b);
+    playSound(bootSoundUrl);
     requestAnimationFrame(() => b.classList.add('show'));
     const onDone = () => { b.classList.remove('show'); setTimeout(() => { b.remove(); }, 480); };
     b.addEventListener('click', onDone);
     setTimeout(onDone, 2000);
   })();
+  }
 
-  // 初始化计算器（替换 eval，为键盘输入与安全解析）
+  // 初始化计算器（仿 Windows XP 标准计算器：内存 / 函数键 / 绿色 LCD / 安全解析）
   function initCalculator() {
+    if (window._calcInited) return; // 只初始化一次，状态跨开关保留
+    window._calcInited = true;
     const disp = document.getElementById('calcDisplay');
     const keys = document.getElementById('calcKeys');
     const winEl = document.getElementById('calculator');
+    const memEl = document.getElementById('calcMem');
     if (!disp || !keys) return;
-    let expr = '';
 
-    // Tokenize expression into numbers, operators, parentheses
+    let expr = '';
+    let memory = 0;
+    let hasMem = false;
+    let justErrored = false;
+
+    // ---- 安全表达式求值（shunting-yard，支持括号与一元负号）----
     function tokenize(s) {
       const tokens = [];
       const re = /\s*([0-9]*\.?[0-9]+|[+\-*/()])\s*/g;
       let m; let last = null;
       while ((m = re.exec(s)) !== null) {
         let t = m[1];
-        // handle unary minus: if t === '-' and last is null or operator or '('
-        if (t === '-' && (last === null || /[+\-*/(]/.test(last))) {
-          // represent unary minus as '0' and '-' operator
-          tokens.push('0');
-        }
-        tokens.push(t);
+        if (t === '-' && (last === null || /[+\-*/(]/.test(last))) tokens.push('u'); // 一元负号
+        else tokens.push(t);
         last = t;
       }
       return tokens;
     }
-
-    // Shunting-yard: infix tokens -> RPN
     function toRPN(tokens) {
       const out = []; const ops = [];
-      const prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
+      const prec = { '+': 1, '-': 1, '*': 2, '/': 2, 'u': 3 };
       tokens.forEach(t => {
-        if (/^[0-9]/.test(t)) { out.push(t); }
-        else if (t === '+' || t === '-' || t === '*' || t === '/') {
+        if (/^[0-9]/.test(t)) out.push(t);
+        else if ('+-*/'.includes(t)) {
           while (ops.length) {
             const o = ops[ops.length - 1];
-            if ((o === '+' || o === '-' || o === '*' || o === '/') && (prec[o] >= prec[t])) {
-              out.push(ops.pop());
-            } else break;
+            if (o !== '(' && prec[o] >= prec[t]) out.push(ops.pop()); else break;
           }
           ops.push(t);
-        } else if (t === '(') { ops.push(t); }
-        else if (t === ')') {
-          while (ops.length && ops[ops.length - 1] !== '(') out.push(ops.pop());
-          if (ops.length && ops[ops.length - 1] === '(') ops.pop();
-        }
+        } else if (t === 'u') {
+          while (ops.length) {
+            const o = ops[ops.length - 1];
+            if (('+-*/'.includes(o) || o === 'u') && prec[o] >= prec.u) out.push(ops.pop()); else break;
+          }
+          ops.push(t);
+        } else if (t === '(') ops.push(t);
+        else if (t === ')') { while (ops.length && ops[ops.length - 1] !== '(') out.push(ops.pop()); if (ops.length) ops.pop(); }
       });
       while (ops.length) out.push(ops.pop());
       return out;
     }
-
-    // Evaluate RPN
     function evalRPN(rpn) {
       const st = [];
       rpn.forEach(t => {
         if (/^[0-9]/.test(t)) st.push(parseFloat(t));
+        else if (t === 'u') { const b = st.pop(); if (b === undefined) throw new Error('Invalid'); st.push(-b); }
         else {
-          const b = st.pop(); const a = st.pop();
+          const b = st.pop(), a = st.pop();
           if (a === undefined || b === undefined) throw new Error('Invalid');
           let r = 0;
           if (t === '+') r = a + b;
@@ -3124,49 +3504,129 @@
       if (st.length !== 1) throw new Error('Invalid');
       return st[0];
     }
-
     function safeEval(s) {
-      try {
-        const tokens = tokenize(s);
-        const rpn = toRPN(tokens);
-        const v = evalRPN(rpn);
-        if (!isFinite(v)) throw new Error('非有限数');
-        return v;
-      } catch (e) { throw e; }
+      const v = evalRPN(toRPN(tokenize(s)));
+      if (!isFinite(v)) throw new Error('非有限数');
+      return v;
     }
 
-    function updateDisplay() { disp.value = expr; }
+    function formatNum(n) {
+      if (typeof n !== 'number' || !isFinite(n)) return '错误';
+      return parseFloat(n.toPrecision(12)).toString();
+    }
+    function updateDisplay() {
+      disp.value = expr === '' ? '0' : expr;
+      if (memEl) memEl.style.visibility = hasMem ? 'visible' : 'hidden';
+    }
+    // 取表达式末尾的数字（含可选的一元负号）
+    function getLastNumber() {
+      const m = expr.match(/(-?\d*\.?\d+)$/);
+      return m ? { raw: m[0], index: m.index } : null;
+    }
+    function currentValue() {
+      const m = getLastNumber();
+      if (m) return parseFloat(m.raw);
+      try { return safeEval(expr || '0'); } catch (e) { return 0; }
+    }
+    function applyToLast(fn) {
+      const m = getLastNumber();
+      const base = m ? parseFloat(m.raw) : 0;
+      const r = fn(base);
+      if (!isFinite(r)) { disp.value = '错误'; expr = ''; justErrored = true; return; }
+      if (!m) expr = formatNum(r);
+      else expr = expr.slice(0, m.index) + formatNum(r) + expr.slice(m.index + m.raw.length);
+    }
+    function freshIfError() { if (justErrored) { expr = ''; justErrored = false; } }
+
+    function pressKey(k) {
+      freshIfError();
+      if (/^[0-9]$/.test(k)) { expr += k; }
+      else if (k === '.') {
+        const m = getLastNumber();
+        if (m && m.raw.includes('.')) return;
+        expr += (m ? '' : (expr === '' || /[+\-*/()]$/.test(expr) ? '0' : '')) + '.';
+      }
+      else if (k === '(' || k === ')') { expr += k; }
+      else if ('+-*/'.includes(k)) {
+        if (expr === '') { if (k === '-') expr = '-'; return; }
+        if (/[+\-*/]$/.test(expr)) { expr = expr.slice(0, -1) + k; } // 替换连续运算符
+        else expr += k;
+      }
+      else if (k === 'neg') {
+        const m = getLastNumber();
+        if (m) expr = expr.slice(0, m.index) + (m.raw[0] === '-' ? m.raw.slice(1) : '-' + m.raw) + expr.slice(m.index + m.raw.length);
+        else if (expr === '' || /[+\-*/()]$/.test(expr)) { if (!expr.endsWith('-')) expr += '-'; }
+      }
+      else if (k === 'sqrt') applyToLast(Math.sqrt);
+      else if (k === 'sq') applyToLast(x => x * x);
+      else if (k === 'pct') applyToLast(x => x / 100);
+      else if (k === 'back') { expr = expr.slice(0, -1); }
+      else if (k === 'ce') {
+        const m = getLastNumber();
+        if (m) expr = expr.slice(0, m.index); else expr = expr.slice(0, -1);
+      }
+      else if (k === 'c') { expr = ''; }
+      else if (k === 'mc') { memory = 0; hasMem = false; }
+      else if (k === 'mr') {
+        const mnum = getLastNumber();
+        if (expr !== '' && mnum && !/[+\-*/()]$/.test(expr)) expr = expr.slice(0, mnum.index) + formatNum(memory);
+        else expr += formatNum(memory);
+      }
+      else if (k === 'ms') { memory = currentValue(); hasMem = true; }
+      else if (k === 'm+') { memory += currentValue(); hasMem = true; }
+      else if (k === '=') {
+        try { expr = formatNum(safeEval(expr || '0')); }
+        catch (e) { disp.value = '错误'; expr = ''; justErrored = true; return; }
+      }
+      updateDisplay();
+    }
 
     keys.querySelectorAll('button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const v = btn.textContent.trim();
-        if (v === 'C') { expr = ''; updateDisplay(); return; }
-        if (v === '=') {
-          try { const res = safeEval(expr || '0'); expr = String(res); updateDisplay(); } catch (e) { disp.value = '错误'; expr = ''; }
-          return;
-        }
-        // append valid characters only
-        if (/^[0-9.+\-*/() ]$/.test(v)) { expr += v; updateDisplay(); }
-      });
+      btn.addEventListener('click', () => pressKey(btn.dataset.k || btn.textContent.trim()));
     });
 
-    // Keyboard support when calculator window is open
+    // 菜单栏（编辑 / 帮助）
+    if (winEl) {
+      winEl.querySelectorAll('.mb-item').forEach(mb => {
+        mb.addEventListener('click', e => {
+          e.stopPropagation();
+          winEl.querySelectorAll('.calc-menu-popup').forEach(p => p.remove());
+          const pop = document.createElement('div');
+          pop.className = 'calc-menu-popup';
+          pop.innerHTML = mb.dataset.calc === 'edit'
+            ? '<div class="cmp-item" data-act="copy">复制</div><div class="cmp-item" data-act="paste">粘贴</div>'
+            : '<div class="cmp-item" data-act="about">关于计算器</div>';
+          mb.appendChild(pop);
+          pop.querySelectorAll('.cmp-item').forEach(it => it.addEventListener('click', () => {
+            pop.remove();
+            const act = it.dataset.act;
+            if (act === 'copy') { try { navigator.clipboard.writeText(disp.value); showMsgToast('已复制：' + disp.value); } catch (e) {} }
+            else if (act === 'paste') { try { navigator.clipboard.readText().then(t => { expr = (expr || '') + t.replace(/[^0-9.+\-*/()%]/g, ''); updateDisplay(); }); } catch (e) {} }
+            else if (act === 'about') { alert('Lunahub 计算器\n仿 Windows XP 标准计算器\n支持 + − × ÷、括号、√、x²、%、±、内存 MC/MR/MS/M+'); }
+          }));
+        });
+      });
+      if (!window._calcMenuClose) {
+        window._calcMenuClose = true;
+        document.addEventListener('mousedown', e => {
+          document.querySelectorAll('.calc-menu-popup').forEach(p => { if (!p.contains(e.target)) p.remove(); });
+        });
+      }
+    }
+
+    // 键盘支持（仅计算器窗口打开时）
     function onKey(e) {
       if (!winEl || winEl.classList.contains('closed')) return;
       const k = e.key;
-      if (/^[0-9]$/.test(k)) { expr += k; updateDisplay(); e.preventDefault(); return; }
-      if (k === '.') { expr += '.'; updateDisplay(); e.preventDefault(); return; }
-      if (k === '+' || k === '-' || k === '*' || k === '/') { expr += k; updateDisplay(); e.preventDefault(); return; }
-      if (k === 'Enter') { try { const res = safeEval(expr || '0'); expr = String(res); updateDisplay(); } catch (err) { disp.value = '错误'; expr = ''; } e.preventDefault(); return; }
-      if (k === 'Backspace') { expr = expr.slice(0, -1); updateDisplay(); e.preventDefault(); return; }
-      if (k === 'Escape') { expr = ''; updateDisplay(); e.preventDefault(); return; }
+      if (/^[0-9]$/.test(k) || k === '.' || k === '(' || k === ')' || '+-*/'.includes(k)) { pressKey(k); e.preventDefault(); }
+      else if (k === 'Enter' || k === '=') { pressKey('='); e.preventDefault(); }
+      else if (k === 'Backspace') { pressKey('back'); e.preventDefault(); }
+      else if (k === 'Escape') { pressKey('c'); e.preventDefault(); }
+      else if (k === '%') { pressKey('pct'); e.preventDefault(); }
     }
-    if (!window._calcKeyInit) {
-      window.addEventListener('keydown', onKey);
-      window._calcKeyInit = true;
-    }
+    window.addEventListener('keydown', onKey);
 
-    // Cleanup: listener persists but checks calculator visibility before acting
+    updateDisplay();
   }
 
   // 初始化 PPT lou
@@ -3184,7 +3644,14 @@
         if (Array.isArray(parsed) && parsed.length) slides = parsed;
       }
     } catch (e) {}
-    function saveSlides() { try { localStorage.setItem(PPT_KEY, JSON.stringify(slides)); } catch (e) {} }
+    let saveWarned = false;
+    function saveSlides() {
+      try { localStorage.setItem(PPT_KEY, JSON.stringify(slides)); saveWarned = false; }
+      catch (e) {
+        // 存储 quota 溢出（base64 图片过大）：不再静默吞掉，提示用户导出备份
+        if (!saveWarned) { saveWarned = true; showMsgToast('保存失败：浏览器存储空间不足，请用「导出」备份后精简图片'); }
+      }
+    }
     function render() {
       const s = slides[idx] || { type: 'text', content: '（空白幻灯片）' };
       if (s.type === 'image') {
@@ -3220,9 +3687,9 @@
         t.addEventListener('drop', (ev) => {
           ev.preventDefault(); t.classList.remove('over'); const src = parseInt(ev.dataTransfer.getData('text/plain'), 10); const dst = i;
           if (isNaN(src) || src === dst) return;
-          const item = slides.splice(src,1)[0];
-          // adjust dst if src < dst since array shifted
-          const insertAt = (src < dst) ? dst : dst;
+          const item = slides.splice(src, 1)[0];
+          // src 在 dst 之前时，移除后目标位已前移一格，需插到 dst-1 才是"落在目标前面"
+          const insertAt = (src < dst) ? dst - 1 : dst;
           slides.splice(insertAt, 0, item);
           saveSlides(); idx = slides.indexOf(item); render();
         });
@@ -3274,7 +3741,7 @@
     if (exportBtn) exportBtn.addEventListener('click', () => {
       try {
         const blob = new Blob([JSON.stringify(slides)], { type: 'application/json' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pptlou.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'powerpoint.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
       } catch (e) { showMsgToast('导出失败：' + e.message); }
     });
     if (importBtn && importFile) {
@@ -3299,6 +3766,731 @@
     }
   }
 
+  // 初始化 Excel（仿 XP 表格：单元格编辑 + =公式 + 单元格引用 + SUM/AVG/MIN/MAX）
+  function initExcel() {
+    if (window._xlInited) return;
+    window._xlInited = true;
+    const rowsEl = document.getElementById('xlRows');
+    if (!rowsEl) return;
+    const COLS = 8, ROWS = 20;
+    const LETTERS = 'ABCDEFGH';
+    const KEY = 'lunahub_excel';
+    let cells = {};
+    try { const raw = localStorage.getItem(KEY); if (raw) cells = JSON.parse(raw) || {}; } catch (e) {}
+    function save() { try { localStorage.setItem(KEY, JSON.stringify(cells)); } catch (e) { showMsgToast('保存失败：存储空间不足'); } }
+    function colName(i) { return LETTERS[i]; }
+    function ref(r, c) { return colName(c) + (r + 1); }
+    function rangeCells(a, b) {
+      const pa = parseRef(a), pb = parseRef(b);
+      const r1 = Math.min(pa.r, pb.r), r2 = Math.max(pa.r, pb.r);
+      const c1 = Math.min(pa.c, pb.c), c2 = Math.max(pa.c, pb.c);
+      const list = [];
+      for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) list.push(ref(r, c));
+      return list;
+    }
+    function parseRef(s) {
+      const m = String(s).match(/^([A-Z]+)(\d+)$/);
+      if (!m) return { r: -1, c: -1 };
+      let c = -1; for (let i = 0; i < LETTERS.length; i++) if (LETTERS[i] === m[1]) c = i;
+      return { r: parseInt(m[2], 10) - 1, c };
+    }
+    // —— 表达式求值（shunting-yard，支持 + - * / 与一元负号、括号）——
+    function toksArith(s) {
+      const out = []; const re = /\s*(\d+\.?\d*|\.\d+|[+\-*/()])/g;
+      let m, last = null;
+      while ((m = re.exec(s)) !== null) {
+        let t = m[1];
+        if (t === '-' && (last === null || /[+\-*/(]/.test(last))) out.push('u');
+        else out.push(t);
+        last = t;
+      }
+      return out;
+    }
+    function evalArith(s) {
+      const toks = toksArith(s);
+      const out = [], ops = []; const prec = { '+': 1, '-': 1, '*': 2, '/': 2, 'u': 3 };
+      toks.forEach(t => {
+        if (/^[\d.]/.test(t)) out.push(parseFloat(t));
+        else if ('+-*/'.includes(t)) {
+          while (ops.length) { const o = ops[ops.length - 1]; if (o !== '(' && prec[o] >= prec[t]) out.push(ops.pop()); else break; }
+          ops.push(t);
+        } else if (t === 'u') {
+          while (ops.length) { const o = ops[ops.length - 1]; if (('+-*/'.includes(o) || o === 'u') && prec[o] >= prec.u) out.push(ops.pop()); else break; }
+          ops.push(t);
+        } else if (t === '(') ops.push(t);
+        else if (t === ')') { while (ops.length && ops[ops.length - 1] !== '(') out.push(ops.pop()); if (ops.length) ops.pop(); }
+      });
+      while (ops.length) out.push(ops.pop());
+      const st = [];
+      out.forEach(t => {
+        if (typeof t === 'number') st.push(t);
+        else if (t === 'u') { const b = st.pop(); if (b === undefined) throw new Error('Invalid'); st.push(-b); }
+        else { const b = st.pop(), a = st.pop(); if (a === undefined || b === undefined) throw new Error('Invalid'); let r = 0; if (t === '+') r = a + b; else if (t === '-') r = a - b; else if (t === '*') r = a * b; else if (t === '/') { if (b === 0) throw new Error('Div0'); r = a / b; } st.push(r); }
+      });
+      if (st.length !== 1) throw new Error('Invalid');
+      return st[0];
+    }
+    const FN = {
+      SUM: a => a.reduce((x, y) => x + y, 0),
+      AVG: a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0,
+      MIN: a => a.length ? Math.min.apply(null, a) : 0,
+      MAX: a => a.length ? Math.max.apply(null, a) : 0,
+      COUNT: a => a.length,
+      ABS: a => Math.abs(a[0] || 0),
+      ROUND: a => Math.round((a[0] || 0) * Math.pow(10, a[1] || 0)) / Math.pow(10, a[1] || 0)
+    };
+    function getValue(k, stack) {
+      const raw = cells[k];
+      if (raw == null || raw === '') return 0;
+      if (raw[0] !== '=') { const n = parseFloat(raw); return isNaN(n) ? 0 : n; }
+      if (stack && stack.indexOf(k) >= 0) return 0; // 循环引用
+      try { return computeFormula(raw.slice(1), (stack || []).concat(k)); }
+      catch (e) { return 0; }
+    }
+    function computeFormula(s, stack) {
+      // 反复解析最内层函数调用（参数中无括号）
+      let prev, cur = s;
+      let guard = 0;
+      do {
+        prev = cur;
+        cur = prev.replace(/([A-Za-z]+)\s*\(([^()]*)\)/g, (m, name, args) => {
+          const fn = FN[name.toUpperCase()];
+          if (!fn) throw new Error('未知函数 ' + name);
+          const nums = [];
+          args.split(',').forEach(arg => {
+            arg = arg.trim(); if (!arg) return;
+            if (/^[A-Z]+\d+:[A-Z]+\d+$/.test(arg)) {
+              const [a, b] = arg.split(':');
+              rangeCells(a, b).forEach(c => nums.push(getValue(c, stack)));
+            } else if (/^[A-Z]+\d+$/.test(arg)) {
+              nums.push(getValue(arg, stack));
+            } else { const n = parseFloat(arg); if (!isNaN(n)) nums.push(n); }
+          });
+          return String(fn(nums));
+        });
+      } while (cur !== prev && ++guard < 50);
+      // 解析单元格引用 → 数值
+      cur = cur.replace(/[A-Z]+\d+/g, ref => String(getValue(ref, stack)));
+      // 求值算术
+      return evalArith(cur);
+    }
+    function displayValue(k) {
+      const raw = cells[k];
+      if (raw == null || raw === '') return '';
+      if (raw[0] !== '=') return raw;
+      try { const v = computeFormula(raw.slice(1), [k]); return (typeof v === 'number' && isFinite(v)) ? formatNum(v) : '错误'; }
+      catch (e) { return '错误'; }
+    }
+    function formatNum(n) { return parseFloat(n.toPrecision(12)).toString(); }
+    function rebuild() {
+      rowsEl.innerHTML = '';
+      // 表头行：角标 + A..H
+      const corner = document.createElement('div'); corner.className = 'xl-cell xl-corner'; rowsEl.appendChild(corner);
+      for (let c = 0; c < COLS; c++) {
+        const h = document.createElement('div'); h.className = 'xl-cell xl-hd'; h.textContent = colName(c);
+        rowsEl.appendChild(h);
+      }
+      // 数据行
+      for (let r = 0; r < ROWS; r++) {
+        const num = document.createElement('div'); num.className = 'xl-cell xl-rn'; num.textContent = (r + 1);
+        rowsEl.appendChild(num);
+        for (let c = 0; c < COLS; c++) {
+          const k = ref(r, c);
+          const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'xl-in'; inp.dataset.cell = k;
+          inp.value = displayValue(k);
+          inp.addEventListener('focus', () => { inp.value = cells[k] || ''; inp.select(); });
+          inp.addEventListener('blur', () => { cells[k] = inp.value; save(); repaint(); });
+          inp.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+          });
+          rowsEl.appendChild(inp);
+        }
+      }
+    }
+    function repaint() {
+      rowsEl.querySelectorAll('input.xl-in').forEach(inp => {
+        if (document.activeElement === inp) return;
+        inp.value = displayValue(inp.dataset.cell);
+      });
+    }
+    rebuild();
+    // 工具栏
+    const clr = document.getElementById('xlClear');
+    const exp = document.getElementById('xlExport');
+    const imp = document.getElementById('xlImport');
+    const file = document.getElementById('xlFile');
+    if (clr) clr.addEventListener('click', () => {
+      if (!confirm('清空所有单元格？此操作不可撤销。')) return;
+      cells = {}; save(); rebuild();
+    });
+    if (exp) exp.addEventListener('click', () => {
+      let csv = '';
+      for (let r = 0; r < ROWS; r++) {
+        const cols = [];
+        for (let c = 0; c < COLS; c++) { const v = cells[ref(r, c)] || ''; cols.push('"' + String(v).replace(/"/g, '""') + '"'); }
+        csv += cols.join(',') + '\r\n';
+      }
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'sheet.csv'; document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+      showMsgToast('已导出 CSV');
+    });
+    if (imp && file) {
+      imp.addEventListener('click', () => file.click());
+      file.addEventListener('change', () => {
+        const f = file.files && file.files[0]; if (!f) return;
+        const rd = new FileReader();
+        rd.onload = () => {
+          const text = rd.result;
+          const lines = text.replace(/\r\n/g, '\n').split('\n').filter(l => l.length);
+          cells = {};
+          lines.forEach((line, r) => {
+            const cols = line.match(/("([^"]|"")*"|[^,]*)(,|$)/g).map(s => s.replace(/,$/, ''));
+            cols.forEach((raw, c) => {
+              if (c >= COLS) return;
+              let v = raw.replace(/^"(.*)"$/, '$1').replace(/""/g, '"');
+              if (v !== '') cells[ref(r, c)] = v;
+            });
+          });
+          save(); rebuild(); showMsgToast('已导入 CSV');
+          file.value = '';
+        };
+        rd.readAsText(f);
+      });
+    }
+  }
+
+
+  /* ===== 日历 ===== */
+  function initCalendar() {
+    const grid = document.getElementById('calGrid');
+    const title = document.getElementById('calTitle');
+    const note = document.getElementById('calNote');
+    const dateLabel = document.getElementById('calDateLabel');
+    const KEY = 'lunahub_calendar_notes';
+    let notes = {};
+    try { notes = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { notes = {}; }
+    let view = new Date(); view.setDate(1);
+    let sel = null;
+
+    function keyOf(d) { return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+    function render() {
+      const y = view.getFullYear(), m = view.getMonth();
+      title.textContent = y + '年 ' + (m + 1) + '月';
+      grid.innerHTML = '';
+      const first = new Date(y, m, 1).getDay();
+      const days = new Date(y, m + 1, 0).getDate();
+      const today = new Date();
+      for (let i = 0; i < first; i++) {
+        const e = document.createElement('span'); e.className = 'cal-cell empty'; grid.appendChild(e);
+      }
+      for (let d = 1; d <= days; d++) {
+        const e = document.createElement('button');
+        e.className = 'cal-cell'; e.textContent = d;
+        const k = y + '-' + (m + 1) + '-' + d;
+        if (notes[k]) e.classList.add('has-note');
+        if (y === today.getFullYear() && m === today.getMonth() && d === today.getDate()) e.classList.add('today');
+        if (sel && sel === k) e.classList.add('sel');
+        e.onclick = () => { sel = k; dateLabel.textContent = (m + 1) + '月' + d + '日'; note.value = notes[k] || ''; render(); };
+        grid.appendChild(e);
+      }
+    }
+    document.getElementById('calPrev').onclick = () => { view.setMonth(view.getMonth() - 1); render(); };
+    document.getElementById('calNext').onclick = () => { view.setMonth(view.getMonth() + 1); render(); };
+    const saveNote = () => {
+      if (!sel) return;
+      const v = note.value.trim();
+      if (v) notes[sel] = v; else delete notes[sel];
+      try { localStorage.setItem(KEY, JSON.stringify(notes)); } catch (e) { showMsgToast('备注保存失败：空间不足'); }
+      render();
+    };
+    note.addEventListener('blur', saveNote);
+    document.getElementById('calClearNote').onclick = () => {
+      if (!sel) { showMsgToast('先点选一个日期'); return; }
+      delete notes[sel]; note.value = '';
+      try { localStorage.setItem(KEY, JSON.stringify(notes)); } catch (e) {}
+      render(); showMsgToast('已清除该日备注');
+    };
+    // 默认选中今天
+    sel = keyOf(today); dateLabel.textContent = (today.getMonth() + 1) + '月' + today.getDate() + '日';
+    note.value = notes[sel] || '';
+    render();
+  }
+
+  /* ===== 打地鼠 ===== */
+  function initWhack() {
+    const grid = document.getElementById('whGrid');
+    if (!grid || grid.dataset.inited) return; grid.dataset.inited = '1';
+    const scoreEl = document.getElementById('whScore');
+    const timeEl = document.getElementById('whTime');
+    const startBtn = document.getElementById('whStart');
+    const holes = [];
+    let score = 0, time = 0, timer = null, mole = null, busy = false;
+    for (let i = 0; i < 9; i++) {
+      const h = document.createElement('button'); h.className = 'wh-hole';
+      const m = document.createElement('span'); m.className = 'wh-mole'; m.textContent = '🐹';
+      h.appendChild(m); grid.appendChild(h); holes.push(h);
+      h.onclick = () => {
+        if (h.classList.contains('up')) {
+          score += 1; scoreEl.textContent = score; h.classList.remove('up');
+        }
+      };
+    }
+    function spawn() {
+      if (mole) mole.classList.remove('up');
+      const i = (Math.random() * 9) | 0; mole = holes[i]; mole.classList.add('up');
+    }
+    function end() {
+      clearInterval(timer); busy = false; startBtn.disabled = false;
+      if (mole) mole.classList.remove('up');
+      showMsgToast('时间到！得分 ' + score);
+      score = 0; time = 0; scoreEl.textContent = '0'; timeEl.textContent = '30';
+    }
+    startBtn.onclick = () => {
+      if (busy) return; busy = true; startBtn.disabled = true;
+      score = 0; time = 30; scoreEl.textContent = '0'; timeEl.textContent = '30';
+      spawn(); timer = setInterval(() => {
+        time--; timeEl.textContent = time; spawn();
+        if (time <= 0) end();
+      }, 1000);
+    };
+  }
+
+  /* ===== 记忆翻牌 ===== */
+  function initMemo() {
+    const grid = document.getElementById('mmGrid');
+    if (!grid || grid.dataset.inited) return; grid.dataset.inited = '1';
+    const scoreEl = document.getElementById('mmScore');
+    const restart = document.getElementById('mmRestart');
+    const ICONS = ['🍎','🍌','🍇','🍓','🍊','🍉','🍒','🥝'];
+    let deck = [], first = null, lock = false, pairs = 0, moves = 0;
+    function build() {
+      deck = []; const pool = ICONS.concat(ICONS);
+      for (let i = pool.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [pool[i], pool[j]] = [pool[j], pool[i]]; }
+      grid.innerHTML = '';
+      pool.forEach((ic, idx) => {
+        const c = document.createElement('button'); c.className = 'mm-card'; c.dataset.ic = ic; c.dataset.idx = idx;
+        c.innerHTML = '<span class="mm-face">？</span>';
+        c.onclick = () => flip(c); grid.appendChild(c); deck.push(c);
+      });
+      first = null; lock = false; pairs = 0; moves = 0; scoreEl.textContent = '0 / 8';
+    }
+    function flip(c) {
+      if (lock || c.classList.contains('open') || c === first) return;
+      c.classList.add('open'); c.querySelector('.mm-face').textContent = c.dataset.ic;
+      if (!first) { first = c; return; }
+      moves++; const a = first, b = c; first = null;
+      if (a.dataset.ic === b.dataset.ic) {
+        pairs++; scoreEl.textContent = pairs + ' / 8';
+        if (pairs === ICONS.length) showMsgToast('全部配对完成！用了 ' + moves + ' 步');
+      } else {
+        lock = true; setTimeout(() => {
+          a.classList.remove('open'); b.classList.remove('open');
+          a.querySelector('.mm-face').textContent = '？'; b.querySelector('.mm-face').textContent = '？';
+          lock = false;
+        }, 700);
+      }
+    }
+    restart.onclick = build; build();
+  }
+
+  /* ===== 五子棋（黑白棋） ===== */
+  function initGomoku() {
+    const cv = document.getElementById('gmCanvas');
+    if (!cv || cv.dataset.inited) return; cv.dataset.inited = '1';
+    const ctx = cv.getContext('2d');
+    const N = 15, LEN = 19 * 19; // LEN 与后端房间棋盘长度(361)对齐以兼容联机
+    const SZ = cv.width / N;
+    const status = document.getElementById('gmStatus');
+    const restart = document.getElementById('gmRestart');
+    const modeLocal = document.getElementById('gmModeLocal');
+    const modeCreate = document.getElementById('gmModeCreate');
+    const modeJoin = document.getElementById('gmModeJoin');
+    const roomInfo = document.getElementById('gmRoomInfo');
+    let board, turn, over;
+    let mode = 'local', ws = null, roomCode = '', myColor = 0;
+    function idx(r, c) { return r * N + c; }
+    function reset() {
+      board = Array(LEN).fill(0);
+      turn = 1; over = false; status.textContent = '黑棋先手'; draw();
+    }
+    function draw() {
+      ctx.fillStyle = '#e3b96b'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.strokeStyle = '#7a5a2a'; ctx.lineWidth = 1;
+      for (let i = 0; i < N; i++) {
+        ctx.beginPath(); ctx.moveTo(i * SZ + SZ / 2, SZ / 2); ctx.lineTo(i * SZ + SZ / 2, cv.height - SZ / 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(SZ / 2, i * SZ + SZ / 2); ctx.lineTo(cv.width - SZ / 2, i * SZ + SZ / 2); ctx.stroke();
+      }
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        if (!board[idx(r, c)]) continue;
+        ctx.beginPath(); ctx.arc(c * SZ + SZ / 2, r * SZ + SZ / 2, SZ / 2 - 3, 0, Math.PI * 2);
+        ctx.fillStyle = board[idx(r, c)] === 1 ? '#111' : '#fff';
+        ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = '#888'; ctx.stroke();
+      }
+    }
+    function win(r, c, p) {
+      const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+      for (const [dr, dc] of dirs) {
+        let n = 1;
+        for (let s = 1; s < 5; s++) { const rr = r + dr * s, cc = c + dc * s; if (rr < 0 || rr >= N || cc < 0 || cc >= N || board[idx(rr, cc)] !== p) break; n++; }
+        for (let s = 1; s < 5; s++) { const rr = r - dr * s, cc = c - dc * s; if (rr < 0 || rr >= N || cc < 0 || cc >= N || board[idx(rr, cc)] !== p) break; n++; }
+        if (n >= 5) return true;
+      }
+      return false;
+    }
+    function placeLocal(r, c) {
+      if (over || board[idx(r, c)]) return;
+      const color = turn;
+      board[idx(r, c)] = color;
+      if (win(r, c, color)) { over = true; status.textContent = (color === 1 ? '⚫ 黑棋' : '⚪ 白棋') + '获胜！'; draw(); return; }
+      turn = turn === 1 ? 2 : 1; status.textContent = turn === 1 ? '黑棋落子' : '白棋落子';
+      draw();
+    }
+    function tryPlace(r, c) {
+      if (mode === 'local') { placeLocal(r, c); return; }
+      if (myColor !== turn) { status.textContent = '请等待对方落子'; return; }
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'move', i: idx(r, c) }));
+    }
+    cv.onclick = e => {
+      if (over) return;
+      const rect = cv.getBoundingClientRect();
+      const x = e.clientX - rect.left, y = e.clientY - rect.top;
+      const c = Math.floor(x / SZ), r = Math.floor(y / SZ);
+      if (r < 0 || r >= N || c < 0 || c >= N || board[idx(r, c)]) return;
+      tryPlace(r, c);
+    };
+    restart.onclick = () => {
+      if (mode !== 'local' && ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'reset' }));
+      reset();
+    };
+    function applyRemoteMove(i, color, newTurn) {
+      const r = Math.floor(i / N), c = i % N;
+      board[idx(r, c)] = color;
+      if (win(r, c, color)) { over = true; status.textContent = (color === 1 ? '⚫ 黑棋' : '⚪ 白棋') + '获胜！'; }
+      else { turn = newTurn; status.textContent = turn === 1 ? '黑棋落子' : '白棋落子'; }
+      draw();
+    }
+    function connectWS(code, asHost) {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const url = proto + '://' + location.host + '/ws/go';
+      try { ws = new WebSocket(url); } catch (e) { status.textContent = '无法连接服务器'; return; }
+      ws.onopen = () => { ws.send(JSON.stringify(asHost ? { type: 'create' } : { type: 'join', code })); };
+      ws.onmessage = ev => {
+        let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m.type === 'created') {
+          roomCode = m.code; myColor = m.color; mode = 'host';
+          roomInfo.textContent = '房间号：' + roomCode + '（你是黑棋）';
+          status.textContent = '等待对手加入…';
+        } else if (m.type === 'joined') {
+          roomCode = m.code; myColor = m.color; mode = 'guest';
+          board = (m.board && m.board.length === LEN) ? m.board.slice() : Array(LEN).fill(0);
+          turn = m.turn; over = false;
+          roomInfo.textContent = '房间号：' + roomCode + '（你是白棋）';
+          draw(); status.textContent = '对手已加入，黑棋先手';
+        } else if (m.type === 'start') {
+          status.textContent = '对手已加入，黑棋先手';
+        } else if (m.type === 'move') {
+          applyRemoteMove(m.i, m.color, m.turn);
+        } else if (m.type === 'reset') {
+          reset();
+        } else if (m.type === 'opponentLeft') {
+          status.textContent = '对手已离开，房间关闭'; mode = 'local'; roomInfo.textContent = '';
+          if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+        } else if (m.type === 'error') {
+          status.textContent = m.msg || '发生错误';
+        }
+      };
+      ws.onclose = () => { if (mode !== 'local') { status.textContent = '连接已断开'; roomInfo.textContent = ''; mode = 'local'; } };
+    }
+    function leaveRoom() {
+      if (ws) { try { ws.send(JSON.stringify({ type: 'leave' })); ws.close(); } catch (e) {} ws = null; }
+      mode = 'local'; roomInfo.textContent = ''; reset();
+    }
+    modeLocal.onclick = () => { leaveRoom(); status.textContent = '本地双人模式'; };
+    modeCreate.onclick = () => { if (ws) leaveRoom(); connectWS(null, true); };
+    modeJoin.onclick = () => {
+      const code = (window.prompt('输入房间号：') || '').trim().toUpperCase();
+      if (!code) return;
+      if (ws) leaveRoom();
+      connectWS(code, false);
+    };
+    reset();
+  }
+
+  /* ===== 围棋（19 路，含提子/禁着/打劫） ===== */
+  function initGo() {
+    const cv = document.getElementById('goCanvas');
+    if (!cv || cv.dataset.inited) return; cv.dataset.inited = '1';
+    const ctx = cv.getContext('2d');
+    const N = 19;
+    const MARGIN = 22, CELL = 28;
+    const status = document.getElementById('goStatus');
+    const blackEl = document.getElementById('goBlack');
+    const whiteEl = document.getElementById('goWhite');
+    const restart = document.getElementById('goRestart');
+    const undo = document.getElementById('goUndo');
+    const modeLocal = document.getElementById('goModeLocal');
+    const modeCreate = document.getElementById('goModeCreate');
+    const modeJoin = document.getElementById('goModeJoin');
+    const roomInfo = document.getElementById('goRoomInfo');
+    const BLACK = 1, WHITE = 2;
+    let board, turn, over, ko, history;
+    let mode = 'local', ws = null, roomCode = '', myColor = 0;
+    function idx(r, c) { return r * N + c; }
+    function reset() {
+      board = Array(N * N).fill(0);
+      turn = BLACK; over = false; ko = -1; history = [];
+      status.textContent = '黑棋先手'; updateCount(); draw();
+    }
+    function updateCount() {
+      let b = 0, w = 0;
+      for (const v of board) { if (v === BLACK) b++; else if (v === WHITE) w++; }
+      blackEl.textContent = b; whiteEl.textContent = w;
+    }
+    function draw() {
+      ctx.fillStyle = '#e3b96b'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.strokeStyle = '#3a2a12'; ctx.lineWidth = 1;
+      for (let i = 0; i < N; i++) {
+        const p = MARGIN + i * CELL;
+        ctx.beginPath(); ctx.moveTo(p, MARGIN); ctx.lineTo(p, cv.height - MARGIN); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(MARGIN, p); ctx.lineTo(cv.width - MARGIN, p); ctx.stroke();
+      }
+      // 星位
+      const stars = [3, 9, 15];
+      ctx.fillStyle = '#3a2a12';
+      for (const r of stars) for (const c of stars) {
+        ctx.beginPath(); ctx.arc(MARGIN + c * CELL, MARGIN + r * CELL, 3, 0, Math.PI * 2); ctx.fill();
+      }
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const v = board[idx(r, c)];
+        if (!v) continue;
+        const x = MARGIN + c * CELL, y = MARGIN + r * CELL;
+        ctx.beginPath(); ctx.arc(x, y, CELL / 2 - 2, 0, Math.PI * 2);
+        ctx.fillStyle = v === BLACK ? '#111' : '#fff'; ctx.fill();
+        ctx.lineWidth = 1; ctx.strokeStyle = '#888'; ctx.stroke();
+        if (v === BLACK) { ctx.beginPath(); ctx.arc(x - 3, y - 3, CELL / 2 - 5, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fill(); }
+      }
+      // 最后一手标记
+      if (history.length) {
+        const last = history[history.length - 1];
+        const x = MARGIN + last.c * CELL, y = MARGIN + last.r * CELL;
+        ctx.strokeStyle = '#d22'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    function neighbors(i) {
+      const r = Math.floor(i / N), c = i % N, out = [];
+      if (r > 0) out.push(i - N); if (r < N - 1) out.push(i + N);
+      if (c > 0) out.push(i - 1); if (c < N - 1) out.push(i + 1);
+      return out;
+    }
+    function group(i, color) {
+      const seen = new Set(), stack = [i];
+      while (stack.length) {
+        const x = stack.pop();
+        if (seen.has(x) || board[x] !== color) continue;
+        seen.add(x);
+        for (const n of neighbors(x)) if (board[n] === color) stack.push(n);
+      }
+      return seen;
+    }
+    function hasLiberty(g) {
+      for (const i of g) for (const n of neighbors(i)) if (board[n] === 0) return true;
+      return false;
+    }
+    // 本地落子（黑白交替），返回是否成功
+    function placeLocal(r, c) {
+      const i = idx(r, c);
+      if (over || board[i] !== 0) return;
+      if (i === ko) { status.textContent = '打劫：不可立即回提此处'; return; }
+      const color = turn, opp = color === BLACK ? WHITE : BLACK;
+      board[i] = color;
+      let captured = [];
+      for (const n of neighbors(i)) {
+        if (board[n] === opp) {
+          const g = group(n, opp);
+          if (!hasLiberty(g)) { for (const x of g) { board[x] = 0; captured.push(x); } }
+        }
+      }
+      // 自杀判定：落子后自身无气且未提子
+      const myGroup = group(i, color);
+      if (!hasLiberty(myGroup) && captured.length === 0) {
+        board[i] = 0; status.textContent = '禁着：不可自杀'; return;
+      }
+      // 打劫：只提掉对方一枚孤子时，该点成为 ko
+      if (captured.length === 1) ko = captured[0]; else ko = -1;
+      history.push({ board: board.slice(), turn: turn, ko, r, c });
+      turn = turn === BLACK ? WHITE : BLACK;
+      updateCount(); draw();
+      status.textContent = turn === BLACK ? '黑棋落子' : '白棋落子';
+    }
+    function tryPlace(r, c) {
+      const i = idx(r, c);
+      if (mode === 'local') { placeLocal(r, c); return; }
+      if (myColor !== turn) { status.textContent = '请等待对方落子'; return; }
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'move', i }));
+    }
+    cv.addEventListener('click', e => {
+      const rect = cv.getBoundingClientRect();
+      const x = e.clientX - rect.left, y = e.clientY - rect.top;
+      const c = Math.round((x - MARGIN) / CELL), r = Math.round((y - MARGIN) / CELL);
+      if (r < 0 || r >= N || c < 0 || c >= N) return;
+      tryPlace(r, c);
+    });
+    undo.onclick = () => {
+      if (!history.length) return;
+      const snap = history.pop();
+      board = snap.board.slice(); turn = snap.turn; ko = snap.ko;
+      updateCount(); draw();
+      status.textContent = turn === BLACK ? '黑棋落子' : '白棋落子';
+    };
+    // 联机：远端落子应用到本地棋盘
+    function applyRemoteMove(i, color, newTurn) {
+      const r = Math.floor(i / N), c = i % N;
+      board[i] = color;
+      const opp = color === BLACK ? WHITE : BLACK;
+      let captured = [];
+      for (const n of neighbors(i)) {
+        if (board[n] === opp) {
+          const g = group(n, opp);
+          if (!hasLiberty(g)) { for (const x of g) { board[x] = 0; captured.push(x); } }
+        }
+      }
+      const myGroup = group(i, color);
+      if (!hasLiberty(myGroup) && captured.length === 0) { board[i] = 0; }
+      history.push({ board: board.slice(), turn: newTurn, ko: -1, r, c });
+      turn = newTurn; updateCount(); draw();
+      status.textContent = (turn === BLACK ? '黑棋' : '白棋') + '落子';
+    }
+    function connectWS(code, asHost) {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const url = proto + '://' + location.host + '/ws/go';
+      try { ws = new WebSocket(url); } catch (e) { status.textContent = '无法连接服务器'; return; }
+      ws.onopen = () => { ws.send(JSON.stringify(asHost ? { type: 'create' } : { type: 'join', code })); };
+      ws.onmessage = ev => {
+        let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m.type === 'created') {
+          roomCode = m.code; myColor = m.color; mode = 'host';
+          roomInfo.textContent = '房间号：' + roomCode + '（你是黑棋）';
+          status.textContent = '等待对手加入…';
+        } else if (m.type === 'joined') {
+          roomCode = m.code; myColor = m.color; mode = 'guest';
+          board = m.board.slice(); turn = m.turn; history = [];
+          roomInfo.textContent = '房间号：' + roomCode + '（你是白棋）';
+          updateCount(); draw();
+          status.textContent = '对手已加入，黑棋先手';
+        } else if (m.type === 'start') {
+          status.textContent = '对手已加入，黑棋先手';
+        } else if (m.type === 'move') {
+          applyRemoteMove(m.i, m.color, m.turn);
+        } else if (m.type === 'reset') {
+          reset();
+        } else if (m.type === 'opponentLeft') {
+          status.textContent = '对手已离开，房间关闭'; mode = 'local'; roomInfo.textContent = '';
+          if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+        } else if (m.type === 'error') {
+          status.textContent = m.msg || '发生错误';
+        }
+      };
+      ws.onclose = () => { if (mode !== 'local') { status.textContent = '连接已断开'; roomInfo.textContent = ''; mode = 'local'; } };
+    }
+    function leaveRoom() {
+      if (ws) { try { ws.send(JSON.stringify({ type: 'leave' })); ws.close(); } catch (e) {} ws = null; }
+      mode = 'local'; roomInfo.textContent = ''; reset();
+    }
+    modeLocal.onclick = () => { leaveRoom(); status.textContent = '本地双人模式'; };
+    modeCreate.onclick = () => { if (ws) leaveRoom(); connectWS(null, true); };
+    modeJoin.onclick = () => {
+      const code = (window.prompt('输入房间号：') || '').trim().toUpperCase();
+      if (!code) return;
+      if (ws) leaveRoom();
+      connectWS(code, false);
+    };
+    restart.onclick = () => {
+      if (mode !== 'local' && ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'reset' }));
+      reset();
+    };
+    reset();
+  }
+
+  /* ===== 井字棋（九宫格） ===== */
+  function initTic() {
+    const grid = document.getElementById('ttGrid');
+    if (!grid || grid.dataset.inited) return; grid.dataset.inited = '1';
+    const status = document.getElementById('ttStatus');
+    const restart = document.getElementById('ttRestart');
+    let board, turn, over;
+    function reset() {
+      board = Array(9).fill(''); turn = 'X'; over = false; status.textContent = '轮到 ❌'; render();
+    }
+    function render() {
+      grid.innerHTML = '';
+      board.forEach((v, i) => {
+        const b = document.createElement('button'); b.className = 'tt-cell'; b.textContent = v;
+        b.onclick = () => {
+          if (over || board[i]) return;
+          board[i] = turn;
+          const w = check();
+          if (w) { over = true; status.textContent = (w === 'X' ? '❌' : '⭕') + ' 获胜！'; render(); return; }
+          if (board.every(x => x)) { over = true; status.textContent = '平局'; render(); return; }
+          turn = turn === 'X' ? 'O' : 'X'; status.textContent = '轮到 ' + (turn === 'X' ? '❌' : '⭕'); render();
+        };
+        grid.appendChild(b);
+      });
+    }
+    function check() {
+      const L = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+      for (const [a,b,c] of L) if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];
+      return null;
+    }
+    reset();
+  }
+
+  /* ===== 单位换算器 ===== */
+  function initConvert() {
+    const catSel = document.getElementById('cvCat');
+    if (!catSel || catSel.dataset.inited) return; catSel.dataset.inited = '1';
+    const fromSel = document.getElementById('cvFrom');
+    const toSel = document.getElementById('cvTo');
+    const inEl = document.getElementById('cvIn');
+    const outEl = document.getElementById('cvOut');
+    const swapBtn = document.getElementById('cvSwap');
+    const CATS = {
+      length: { name: '长度', units: { m: 1, km: 1000, cm: 0.01, mm: 0.001, mi: 1609.344, yd: 0.9144, ft: 0.3048, in: 0.0254 } },
+      weight: { name: '重量', units: { kg: 1, g: 0.001, mg: 1e-6, t: 1000, lb: 0.45359237, oz: 0.0283495 } },
+      temp: { name: '温度', units: { C: 'C', F: 'F', K: 'K' } },
+      area: { name: '面积', units: { m2: 1, km2: 1e6, cm2: 1e-4, ha: 1e4, ft2: 0.092903, acre: 4046.86 } },
+      volume: { name: '体积', units: { L: 1, mL: 0.001, m3: 1000, gal: 3.78541, pt: 0.473176 } },
+      time: { name: '时间', units: { s: 1, min: 60, h: 3600, d: 86400, wk: 604800 } },
+      speed: { name: '速度', units: { mps: 1, kmh: 0.277778, mph: 0.44704, knot: 0.514444 } },
+      data: { name: '数据', units: { B: 1, KB: 1024, MB: 1048576, GB: 1073741824, TB: 1099511627776 } }
+    };
+    function fillUnits(cat) {
+      const u = CATS[cat].units; fromSel.innerHTML = ''; toSel.innerHTML = '';
+      Object.keys(u).forEach(k => {
+        fromSel.appendChild(new Option(k, k)); toSel.appendChild(new Option(k, k));
+      });
+      if (toSel.options.length > 1) toSel.selectedIndex = 1;
+    }
+    function convert() {
+      const cat = catSel.value, u = CATS[cat].units, v = parseFloat(inEl.value);
+      if (isNaN(v)) { outEl.value = ''; return; }
+      if (cat === 'temp') {
+        const f = fromSel.value, t = toSel.value;
+        let c = f === 'C' ? v : f === 'F' ? (v - 32) * 5 / 9 : v - 273.15;
+        outEl.value = (t === 'C' ? c : t === 'F' ? c * 9 / 5 + 32 : c + 273.15).toFixed(2);
+        return;
+      }
+      outEl.value = (v * u[fromSel.value] / u[toSel.value]).toPrecision(10).replace(/\.?0+$/, '');
+    }
+    catSel.onchange = () => { fillUnits(catSel.value); convert(); };
+    fromSel.onchange = convert; toSel.onchange = convert; inEl.oninput = convert;
+    swapBtn.onclick = () => { const a = fromSel.value; fromSel.value = toSel.value; toSel.value = a; convert(); };
+    Object.keys(CATS).forEach(k => catSel.appendChild(new Option(CATS[k].name, k)));
+    fillUnits('length'); inEl.value = '1'; convert();
+  }
+
   WM.open('home');
+  WM.open('help');
 
 })();

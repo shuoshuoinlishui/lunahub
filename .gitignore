@@ -19,7 +19,7 @@ test_api.mjs
 
 # 日志
 server.log
-*.err.log
+*.log
 
 # 系统/编辑器
 .DS_Store
@@ -27,3 +27,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# 备份文件（含密码哈希）
+data/*.bak

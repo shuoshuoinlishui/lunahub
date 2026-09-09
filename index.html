@@ -11,18 +11,7 @@
 <div class="desktop" id="desktop">
 
   <!-- 桌面图标（XP 经典：双击打开） -->
-  <div class="desk-icons" id="deskIcons">
-    <button class="dico" data-app="home"><span class="di-ico">🖥️</span><span class="di-txt">我的电脑</span></button>
-    <button class="dico" data-app="browser"><span class="di-ico">🌐</span><span class="di-txt">Internet Explorer</span></button>
-    <button class="dico" data-app="notepad"><span class="di-ico">📝</span><span class="di-txt">记事本</span></button>
-    <button class="dico" data-app="mines"><span class="di-ico">💣</span><span class="di-txt">扫雷</span></button>
-    <button class="dico" data-app="music"><span class="di-ico">🎵</span><span class="di-txt">Luna媒体播放器</span></button>
-    <button class="dico" data-app="photos"><span class="di-ico">📷</span><span class="di-txt">Luna照片查看器</span></button>
-    <button class="dico" data-app="paint"><span class="di-ico">🎨</span><span class="di-txt">Luna画图</span></button>
-    <button class="dico" data-app="pointer"><span class="di-ico">🖍️</span><span class="di-txt">电子教鞭</span></button>
-    <button class="dico" data-app="forums"><span class="di-ico">📂</span><span class="di-txt">论坛分区</span></button>
-    <button class="dico" data-app="donate"><span class="di-ico">💝</span><span class="di-txt">捐赠支持</span></button>
-  </div>
+  <div class="desk-icons" id="deskIcons"><!-- 桌面图标由 JS 动态渲染（管理员可在后台控制显示/隐藏） --></div>
 
   <!-- ===== 窗口们（真实可拖动 / 缩放 / 聚焦） ===== -->
 
@@ -116,29 +105,50 @@
     </div>
   </section>
 
-  <!-- 新增应用：计算器、PowerPoint (lou 版) -->
-  <section class="window" id="calculator" data-title="计算器" data-icon="🧮" style="width:320px;height:360px">
+  <!-- 新增应用：计算器、PowerPoint -->
+  <section class="window" id="calculator" data-title="计算器" data-icon="🧮" style="width:300px;height:392px">
     <div class="titlebar">
       <span class="ico">🧮</span>
       <span class="title">计算器 — Lunahub</span>
       <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
     </div>
+    <div class="menubar calc-menubar">
+      <span class="mb-item" data-calc="edit">编辑</span>
+      <span class="mb-item" data-calc="help">帮助</span>
+    </div>
     <div class="winbody calc-body">
-      <div class="calc-display"><input id="calcDisplay" readonly></div>
-      <div class="calc-keys" id="calcKeys">
-        <button>7</button><button>8</button><button>9</button><button>/</button>
-        <button>4</button><button>5</button><button>6</button><button>*</button>
-        <button>1</button><button>2</button><button>3</button><button>-</button>
-        <button>0</button><button>.</button><button>=</button><button>+</button>
-        <button class="wide" id="calcClear">C</button>
+      <div class="calc-display">
+        <span class="calc-m" id="calcMem">M</span>
+        <input id="calcDisplay" readonly>
+      </div>
+      <div class="calc-grid" id="calcKeys">
+        <button class="fn" data-k="sqrt">√</button>
+        <button class="fn" data-k="sq">x²</button>
+        <button class="fn" data-k="pct">%</button>
+        <button class="fn" data-k="(">(</button>
+        <button class="fn" data-k=")">)</button>
+
+        <button class="mem" data-k="mc">MC</button>
+        <button>7</button><button>8</button><button>9</button><button class="op" data-k="/">÷</button>
+        <button class="mem" data-k="mr">MR</button>
+        <button>4</button><button>5</button><button>6</button><button class="op" data-k="*">×</button>
+        <button class="mem" data-k="ms">MS</button>
+        <button>1</button><button>2</button><button>3</button><button class="op" data-k="-">−</button>
+        <button class="mem" data-k="m+">M+</button>
+        <button>0</button><button data-k="neg">±</button><button data-k=".">.</button><button class="op" data-k="+">+</button>
+
+        <button class="wide1" data-k="back">←</button>
+        <button data-k="ce">CE</button>
+        <button data-k="c">C</button>
+        <button class="eq" data-k="=">=</button>
       </div>
     </div>
   </section>
 
-  <section class="window" id="pptlou" data-title="PowerPoint (lou 版)" data-icon="📽️" style="width:640px;height:460px">
+  <section class="window" id="pptlou" data-title="PowerPoint" data-icon="📽️" style="width:640px;height:460px">
     <div class="titlebar">
       <span class="ico">📽️</span>
-      <span class="title">PowerPoint (lou 版) — Lunahub</span>
+      <span class="title">PowerPoint — Lunahub</span>
       <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
     </div>
     <div class="winbody ppt-body">
@@ -158,6 +168,199 @@
     </div>
   </section>
 
+  <!-- Excel -->
+  <section class="window" id="excel" data-title="Excel" data-icon="📊" style="width:680px;height:460px">
+    <div class="titlebar">
+      <span class="ico">📊</span>
+      <span class="title">Excel — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody xl-body">
+      <div class="xl-toolbar">
+        <button class="xp-btn small" id="xlClear">清空</button>
+        <button class="xp-btn small" id="xlExport">导出 CSV</button>
+        <button class="xp-btn small" id="xlImport">导入 CSV</button>
+        <input type="file" id="xlFile" accept=".csv,text/csv" style="display:none">
+        <span class="xl-hint" id="xlHint">支持 = 公式、单元格引用（如 A1）、SUM/AVG/MIN/MAX(范围)</span>
+      </div>
+      <div class="xl-wrap">
+        <div class="xl-rows" id="xlRows"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 日历 -->
+  <section class="window" id="calendar" data-title="日历" data-icon="📅" style="width:320px;height:360px">
+    <div class="titlebar">
+      <span class="ico">📅</span>
+      <span class="title">日历 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody cal-body">
+      <div class="cal-bar">
+        <button class="xp-btn small" id="calPrev">◀</button>
+        <span class="cal-title" id="calTitle">—</span>
+        <button class="xp-btn small" id="calNext">▶</button>
+      </div>
+      <div class="cal-week">
+        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="cal-note">
+        <div class="cal-note-head"><span id="calDateLabel">—</span><button class="xp-btn small" id="calClearNote">清除</button></div>
+        <textarea id="calNote" class="cal-textarea" placeholder="给这一天写点备注…"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <!-- 打地鼠 -->
+  <section class="window" id="whack" data-title="打地鼠" data-icon="🐹" style="width:300px;height:380px">
+    <div class="titlebar">
+      <span class="ico">🐹</span>
+      <span class="title">打地鼠 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody wh-body">
+      <div class="wh-bar"><span>得分：<b id="whScore">0</b></span><span>剩余：<b id="whTime">30</b>s</span><button class="xp-btn small" id="whStart">开始</button></div>
+      <div class="wh-grid" id="whGrid"></div>
+      <div class="wh-tip">地鼠冒头时点它！30 秒倒计时</div>
+    </div>
+  </section>
+
+  <!-- 记忆翻牌 -->
+  <section class="window" id="memo" data-title="记忆翻牌" data-icon="🃏" style="width:340px;height:420px">
+    <div class="titlebar">
+      <span class="ico">🃏</span>
+      <span class="title">记忆翻牌 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody mm-body">
+      <div class="mm-bar"><span>配对：<b id="mmScore">0 / 8</b></span><button class="xp-btn small" id="mmRestart">重新洗牌</button></div>
+      <div class="mm-grid" id="mmGrid"></div>
+    </div>
+  </section>
+
+  <!-- 五子棋 -->
+  <section class="window" id="gomoku" data-title="五子棋" data-icon="⚫" style="width:480px;height:585px">
+    <div class="titlebar">
+      <span class="ico">⚫</span>
+      <span class="title">五子棋 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody gm-body">
+      <div class="gm-bar"><span id="gmStatus">黑棋先手</span><button class="xp-btn small" id="gmRestart">重新开始</button></div>
+      <div class="gm-mode" id="gmModeBar">
+        <button class="xp-btn small" id="gmModeLocal">本地双人</button>
+        <button class="xp-btn small" id="gmModeCreate">创建房间</button>
+        <button class="xp-btn small" id="gmModeJoin">加入房间</button>
+        <span id="gmRoomInfo" class="gm-room-info"></span>
+      </div>
+      <canvas id="gmCanvas" class="gm-canvas" width="450" height="450"></canvas>
+      <div class="gm-tip">黑棋 ⚫ 先手，鼠标点格落子，连成五子获胜</div>
+    </div>
+  </section>
+
+  <!-- 围棋 -->
+  <section class="window" id="go" data-title="Luna围棋大师" data-icon="⚫" style="width:600px;height:660px">
+    <div class="titlebar">
+      <span class="ico">⚫</span>
+      <span class="title">Luna围棋大师 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody go-body">
+      <div class="go-bar">
+        <span id="goStatus">黑棋先手</span>
+        <span class="go-count">黑 <b id="goBlack">0</b> · 白 <b id="goWhite">0</b></span>
+        <button class="xp-btn small" id="goUndo">悔棋</button>
+        <button class="xp-btn small" id="goRestart">重新开始</button>
+      </div>
+      <div class="go-mode" id="goModeBar">
+        <button class="xp-btn small" id="goModeLocal">本地双人</button>
+        <button class="xp-btn small" id="goModeCreate">创建房间</button>
+        <button class="xp-btn small" id="goModeJoin">加入房间</button>
+        <span id="goRoomInfo" class="go-room-info"></span>
+      </div>
+      <canvas id="goCanvas" class="go-canvas" width="548" height="548"></canvas>
+      <div class="go-tip">黑棋 ⚫ 先手，点交叉点落子；提子/禁着/打劫已实现，数子需手动结算</div>
+    </div>
+  </section>
+
+  <!-- 井字棋 -->
+  <section class="window" id="tictactoe" data-title="井字棋" data-icon="🔲" style="width:300px;height:360px">
+    <div class="titlebar">
+      <span class="ico">🔲</span>
+      <span class="title">井字棋 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody tt-body">
+      <div class="tt-bar"><span id="ttStatus">轮到 ❌</span><button class="xp-btn small" id="ttRestart">重新开始</button></div>
+      <div class="tt-grid" id="ttGrid"></div>
+    </div>
+  </section>
+
+  <!-- 单位换算 -->
+  <section class="window" id="convert" data-title="单位换算" data-icon="🔁" style="width:360px;height:280px">
+    <div class="titlebar">
+      <span class="ico">🔁</span>
+      <span class="title">单位换算 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody cv-body">
+      <div class="cv-row"><label>类型</label><select id="cvCat" class="cv-sel"></select></div>
+      <div class="cv-row">
+        <input id="cvIn" class="cv-in" type="number" value="1">
+        <select id="cvFrom" class="cv-sel"></select>
+        <button class="xp-btn small" id="cvSwap" title="互换">⇄</button>
+        <input id="cvOut" class="cv-in" readonly>
+        <select id="cvTo" class="cv-sel"></select>
+      </div>
+      <div class="cv-tip">支持 长度/重量/温度/面积/体积/时间/速度/数据</div>
+    </div>
+  </section>
+
+  <!-- 使用说明 -->
+  <section class="window" id="help" data-title="使用说明" data-icon="📖" style="width:460px;height:440px">
+    <div class="titlebar">
+      <span class="ico">📖</span>
+      <span class="title">使用说明 — Lunahub</span>
+      <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
+    </div>
+    <div class="winbody help-body">
+      <h3>👋 欢迎来到 Lunahub</h3>
+      <p>这是一个仿 Windows XP 的网页桌面环境，集合了论坛、媒体、办公小工具。下面是快速上手指南。</p>
+      <h4>🔑 账号</h4>
+      <ul>
+        <li>点左下「开始 → 登录」可登录或注册。未登录以游客身份浏览。</li>
+        <li>发帖、回复、聊天、上传壁纸/媒体需要<b>先登录</b>。</li>
+        <li>忘记密码请联系管理员，在「管理后台 → 用户管理 → 重置密码」修改。</li>
+      </ul>
+      <h4>🖱️ 打开应用</h4>
+      <ul>
+        <li><b>桌面图标</b>：双击图标打开（我的电脑、PowerPoint、Excel 等）。</li>
+        <li><b>开始菜单</b>：左下「开始」→ 程序列表里点对应项。</li>
+        <li><b>快速启动栏</b>：任务栏左侧的小图标，单击即开。</li>
+      </ul>
+      <h4>💼 办公工具</h4>
+      <ul>
+        <li><b>计算器</b>：仿 XP 标准计算器，支持内存键 MC/MR/MS/M+、√、x²、%、括号。</li>
+        <li><b>PowerPoint</b>：简易幻灯片，可加文字/图片、拖拽排序、导出 JSON。</li>
+        <li><b>Excel</b>：单元格可输入数字或 <code>=</code> 公式，支持单元格引用与 SUM/AVG/MIN/MAX。</li>
+      </ul>
+      <h4>🌐 社区</h4>
+      <ul>
+        <li><b>论坛分区</b>：按板块浏览话题，点「进入全部」看所有帖。</li>
+        <li><b>在线聊天</b>：登录后可发消息，实时同步。</li>
+        <li><b>画廊 / 媒体播放器</b>：浏览图片与音乐视频。</li>
+      </ul>
+      <h4>🎨 个性化</h4>
+      <ul>
+        <li>「外观和个性化」可换壁纸、主题、窗口颜色、字体大小、鼠标指针皮肤。</li>
+        <li>管理员可在「管理后台」配置开机/关机音效。</li>
+      </ul>
+      <p class="copy">关机请点「开始 → 关机」，可选择关机 / 重启 / 睡眠。</p>
+    </div>
+  </section>
+
   <!-- 管理后台（仅管理员可见可用） -->
   <section class="window" id="admin" data-title="管理后台" data-icon="🛡️" style="width:540px;height:480px">
     <div class="titlebar">
@@ -171,6 +374,8 @@
         <div class="admin-tabs">
           <button class="atab active" data-tab="users">用户管理</button>
           <button class="atab" data-tab="ann">发布公告</button>
+          <button class="atab" data-tab="sound">系统音效</button>
+          <button class="atab" data-tab="desk">桌面应用</button>
         </div>
         <div id="adminUsersView">
           <div id="adminUserList" class="admin-users"></div>
@@ -181,6 +386,15 @@
           <div class="modal-actions">
             <button class="xp-btn primary" id="annSubmit" type="button">发布</button>
           </div>
+        </div>
+        <div id="adminSoundView" hidden>
+          <div class="field"><label>开机音效</label><div class="sound-row"><button class="xp-btn small" id="sndBootBtn" type="button">📤 上传开机音效</button><span class="sound-status" id="sndBootStatus">未设置</span><button class="xp-btn small danger" id="sndBootDel" type="button" hidden>删除</button></div><input id="sndBootFile" type="file" accept="audio/*" hidden></div>
+          <div class="field"><label>关机音效</label><div class="sound-row"><button class="xp-btn small" id="sndShutBtn" type="button">📤 上传关机音效</button><span class="sound-status" id="sndShutStatus">未设置</span><button class="xp-btn small danger" id="sndShutDel" type="button" hidden>删除</button></div><input id="sndShutFile" type="file" accept="audio/*" hidden></div>
+          <p class="acct-tip">仅支持 MP3 / WAV / OGG / FLAC 等浏览器可播放格式，建议 ≤ 5MB。设置后将在开机 / 关机时自动播放。</p>
+        </div>
+        <div id="adminDeskView" hidden>
+          <p class="acct-tip">勾选的应用会出现在桌面上，取消勾选则从桌面移除。修改后即时生效。</p>
+          <div id="deskAppList" class="desk-app-list"></div>
         </div>
       </div>
       <div id="adminNoPerm" class="admin-noperm">🔒 需要管理员权限才能访问此页面。<br>请使用管理员账号登录（默认 admin / admin123）。</div>
@@ -311,7 +525,7 @@
       <span class="title">外观和个性化</span>
       <span class="winbtns"><button class="wb min">_</button><button class="wb max">▢</button><button class="wb close">✕</button></span>
     </div>
-    <div class="menubar" id="appMenubar"><span class="mb-item" data-scroll="sec-theme">桌面</span><span class="mb-item" data-scroll="sec-theme">主题</span><span class="mb-item" data-scroll="sec-winColor">窗口颜色</span><span class="mb-item" data-scroll="sec-font">字体</span></div>
+    <div class="menubar" id="appMenubar"><span class="mb-item" data-scroll="sec-desktop">桌面</span><span class="mb-item" data-scroll="sec-theme">主题</span><span class="mb-item" data-scroll="sec-winColor">窗口颜色</span><span class="mb-item" data-scroll="sec-font">字体</span></div>
     <div class="winbody">
       <div class="sec-title" id="sec-theme">🎁 一键主题 <small>点一下就把壁纸 · 标题栏 · 任务栏色 · 字体都换掉</small></div>
       <div class="theme-grid" id="themeGrid"></div>
@@ -320,22 +534,26 @@
       <div class="wp-toolbar">
         <button id="wpUpload" type="button" class="wp-tb-btn">📤 上传壁纸</button>
         <button id="wpExtract" type="button" class="wp-tb-btn">📥 提取当前壁纸</button>
-        <button id="wpMenuUpload" type="button" class="wp-tb-btn">🖼️ 我的上传</button>
+        <button id="wpMenuUpload" type="button" class="wp-tb-btn">🔄 刷新我的上传</button>
         <input id="wpFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" hidden />
         <span class="wp-tip" id="wpTip">登录后可上传自己的壁纸，管理员可删除上传项</span>
       </div>
       <div class="appear-grid" id="wpGrid"></div>
-      <div class="appear-grid user-grid" id="wpUserGrid" style="display:none"></div>
+      <div class="sec-title" id="sec-myuploads">🖼️ 我的上传 <small>只显示你上传的壁纸</small></div>
+      <div class="appear-grid user-grid" id="wpUserGrid"></div>
 
       <div class="sec-title" id="sec-font">字体大小</div>
       <div class="fs-row" id="fsRow">
-        <small>文字</small>
+        <small>大小</small>
         <button class="fs-btn" data-fs="sm">小</button>
         <button class="fs-btn" data-fs="md">中</button>
         <button class="fs-btn" data-fs="lg">大</button>
         <button class="fs-btn" data-fs="xl">超大</button>
         <span class="fs-sample" id="fsSample">Lunahub · 复古计算</span>
       </div>
+
+      <div class="sec-title" id="sec-cursor">鼠标指针皮肤</div>
+      <div class="cursor-row" id="cursorGrid"></div>
 
       <div class="sec-title" id="sec-winColor">窗口颜色（标题栏 / 任务栏）</div>
       <div class="accent-row" id="accentGrid"></div>
@@ -389,6 +607,7 @@
         <div class="acct-meinfo">
           <b id="acctName">未登录</b>
           <span id="acctRole" class="acct-role"></span>
+          <div class="acct-tip">🔑 出于安全考虑，密码仅可由管理员修改。如需更改请联系管理员。</div>
           <div class="acct-tip">从下方挑选一张图片，或导入自己的图片作为头像</div>
         </div>
       </div>
@@ -594,20 +813,64 @@
     </button>
     <div class="sm-body">
       <div class="sm-col">
-        <a href="#" data-open="home">🖥️ 我的电脑</a>
-        <a href="#" data-open="browser">🌐 Internet Explorer</a>
-        <a href="#" data-open="notepad">📝 记事本</a>
-        <a href="#" data-open="mines">💣 扫雷</a>
-        <a href="#" data-open="music">🎵 Luna媒体播放器</a>
-        <a href="#" data-open="photos">📷 Luna照片查看器</a>
-        <a href="#" data-open="paint">🎨 Luna画图</a>
-        <a href="#" data-open="pointer">🖍️ 电子教鞭</a>
-        <a href="#" data-open="forums">📂 论坛分区</a>
-        <a href="#" data-open="gallery">🖼️ 画廊精选</a>
-        <a href="#" data-open="chat">🗨️ 在线聊天</a>
-        <a href="#" data-open="topics">💬 论坛</a>
-        <a href="#" data-open="donate">💝 捐赠支持</a>
-        <a href="#" data-open="about">🛖 关于 Lunahub</a>
+        <div class="sm-pinned" id="smPinned">
+          <a href="#" data-open="home">🖥️ 我的电脑</a>
+          <a href="#" data-open="browser">🌐 Internet Explorer</a>
+          <a href="#" data-open="help">📖 使用说明</a>
+        </div>
+        <div class="sm-allprog" id="smAllProg" hidden>
+          <div class="sm-folder">
+            <button class="sm-folder-head" type="button">📁 办公</button>
+            <div class="sm-folder-items">
+              <a href="#" data-open="notepad">📝 记事本</a>
+              <a href="#" data-open="calculator">🧮 计算器</a>
+              <a href="#" data-open="pptlou">📽️ PowerPoint</a>
+              <a href="#" data-open="excel">📊 Excel</a>
+            </div>
+          </div>
+          <div class="sm-folder">
+            <button class="sm-folder-head" type="button">📁 媒体</button>
+            <div class="sm-folder-items">
+              <a href="#" data-open="music">🎵 Luna媒体播放器</a>
+              <a href="#" data-open="photos">📷 Luna照片查看器</a>
+              <a href="#" data-open="paint">🎨 Luna画图</a>
+            </div>
+          </div>
+          <div class="sm-folder">
+            <button class="sm-folder-head" type="button">📁 游戏</button>
+            <div class="sm-folder-items">
+              <a href="#" data-open="mines">💣 扫雷</a>
+              <a href="#" data-open="whack">🐹 打地鼠</a>
+              <a href="#" data-open="memo">🃏 记忆翻牌</a>
+              <a href="#" data-open="gomoku">⚫ 五子棋</a>
+              <a href="#" data-open="go">⚫ Luna围棋大师</a>
+              <a href="#" data-open="tictactoe">🔲 井字棋</a>
+            </div>
+          </div>
+          <div class="sm-folder">
+            <button class="sm-folder-head" type="button">📁 社区</button>
+            <div class="sm-folder-items">
+              <a href="#" data-open="forums">📂 论坛分区</a>
+              <a href="#" data-open="chat">🗨️ 在线聊天</a>
+              <a href="#" data-open="topics">💬 论坛</a>
+              <a href="#" data-open="gallery">🖼️ 画廊精选</a>
+            </div>
+          </div>
+          <div class="sm-folder">
+            <button class="sm-folder-head" type="button">📁 其他</button>
+            <div class="sm-folder-items">
+              <a href="#" data-open="pointer">🖍️ 电子教鞭</a>
+              <a href="#" data-open="calendar">📅 日历</a>
+              <a href="#" data-open="convert">🔁 单位换算</a>
+              <a href="#" data-open="donate">💝 捐赠支持</a>
+              <a href="#" data-open="about">🛖 关于 Lunahub</a>
+            </div>
+          </div>
+        </div>
+        <div class="sm-sep"></div>
+        <button class="sm-allprog-btn" id="smAllProgBtn" type="button">
+          <span class="sm-arrow">▶</span> 所有程序
+        </button>
       </div>
       <div class="sm-col right">
         <a href="#" id="smControl">🛠 控制面板</a>
@@ -619,7 +882,6 @@
     </div>
     <div class="sm-foot">
       <button class="xp-btn small" id="smLogin">登录</button>
-      <button class="xp-btn small" id="smGuest">作为访客登录</button>
       <button class="xp-btn small" id="smShut">关机</button>
     </div>
   </div>
@@ -653,6 +915,7 @@
             <button class="xp-btn primary" id="loginSubmit" type="button">登录</button>
             <button class="xp-btn" id="loginCancel" type="button">取消</button>
           </div>
+          <div class="login-tip">🔑 忘记密码？请联系管理员修改</div>
           <div class="login-reg">还没有账号？<a href="#" id="loginReg">立即注册</a></div>
         </div>
 
@@ -750,13 +1013,15 @@
       <a class="ql" data-open="topics" title="论坛">💬</a>
       <a class="ql" data-open="gallery" title="画廊">🖼️</a>
       <a class="ql" data-open="calculator" title="计算器">🧮</a>
-      <a class="ql" data-open="pptlou" title="PowerPoint (lou)">📽️</a>
+      <a class="ql" data-open="pptlou" title="PowerPoint">📽️</a>
       <a class="ql" data-open="donate" title="捐赠">💝</a>
       <a class="ql" data-open="about" title="关于">🛖</a>
     </div>
     <div class="running" id="running"></div>
     <div class="tray">
-      <span title="音量">🔊</span>
+      <span class="tray-vol" id="trayVolWrap">
+        <button class="tray-vol-ico" id="trayMute" type="button" title="音量控制">🔊</button>
+      </span>
       <span title="网络" class="tray-net">📶</span>
       <button class="tray-user" id="trayLogin" type="button" title="登录账户">👤<span>登录</span></button>
       <span class="clock" id="clock">--:--</span>

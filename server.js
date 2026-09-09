@@ -7,6 +7,8 @@ const crypto = require('crypto');
 const { URL } = require('url');
 
 const ROOT = __dirname;
+const WS_PATH = '/ws/go';
+const WS = require('ws');
 const DATA = path.join(ROOT, 'data', 'forum.json');
 const DATA_USERS = path.join(ROOT, 'data', 'users.json');
 const DATA_GALLERY = path.join(ROOT, 'data', 'gallery.json');
@@ -638,6 +640,21 @@ const server = http.createServer(async (req, res) => {
     saveUsers(d);
     return sendJSON(res, 200, { ok: true, user: target });
   }
+  const mup = p.match(/^\/api\/admin\/users\/([^/]+)\/password$/);
+  if (mup && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const b = await readBody(req);
+    const pass = String(b.pass || '');
+    if (pass.length < 6) return sendJSON(res, 400, { error: '新密码至少 6 位' });
+    const target = decodeURIComponent(mup[1]);
+    const d = loadUsers();
+    const rec = d.users.find(x => x.user.toLowerCase() === target.toLowerCase());
+    if (!rec) return sendJSON(res, 404, { error: '用户不存在' });
+    rec.salt = crypto.randomBytes(8).toString('hex');
+    rec.pass = hashPass(pass, rec.salt);
+    saveUsers(d);
+    return sendJSON(res, 200, { ok: true, user: rec.user });
+  }
 
   const mtp = p.match(/^\/api\/admin\/topics\/([^/]+)\/pin$/);
   if (mtp && req.method === 'POST') {
@@ -661,6 +678,27 @@ const server = http.createServer(async (req, res) => {
     saveForum(d);
     return sendJSON(res, 200, { ok: true, id: t.id, hidden: t.hidden });
   }
+  const mtd = p.match(/^\/api\/admin\/topics\/([^/]+)\/delete$/);
+  if (mtd && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const d = loadForum();
+    const before = d.topics.length;
+    d.topics = d.topics.filter(t => t.id !== mtd[1]);
+    if (d.topics.length === before) return sendJSON(res, 404, { error: '话题不存在' });
+    saveForum(d);
+    return sendJSON(res, 200, { ok: true, id: mtd[1] });
+  }
+  const mcd = p.match(/^\/api\/admin\/categories\/([^/]+)\/delete$/);
+  if (mcd && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const cat = decodeURIComponent(mcd[1]);
+    const d = loadForum();
+    const before = d.categories.length;
+    d.categories = d.categories.filter(c => c !== cat);
+    if (d.categories.length === before) return sendJSON(res, 404, { error: '板块不存在' });
+    saveForum(d);
+    return sendJSON(res, 200, { ok: true, category: cat });
+  }
   if (p === '/api/announcements' && req.method === 'POST') {
     if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
     const b = await readBody(req);
@@ -677,6 +715,16 @@ const server = http.createServer(async (req, res) => {
     });
     saveForum(d);
     return sendJSON(res, 201, { ok: true, announcement: d.announcements[0] });
+  }
+  const mad = p.match(/^\/api\/announcements\/([^/]+)\/delete$/);
+  if (mad && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const d = loadForum();
+    const before = (d.announcements || []).length;
+    d.announcements = (d.announcements || []).filter(a => a.id !== mad[1]);
+    if ((d.announcements || []).length === before) return sendJSON(res, 404, { error: '公告不存在' });
+    saveForum(d);
+    return sendJSON(res, 200, { ok: true, id: mad[1] });
   }
 
   // === 画廊（管理员可编辑） ===
@@ -905,6 +953,61 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(res, 200, { ok: true });
   }
 
+  // === 系统音效（开机 / 关机，管理员配置） ===
+  const SOUNDS_DIR = path.join(ASSETS_DIR, 'media', 'sounds');
+  const DATA_SOUNDS = path.join(ROOT, 'data', 'sounds.json');
+  const SOUND_MIMES = {
+    'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav',
+    'audio/ogg': 'ogg', 'audio/flac': 'flac', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'aac'
+  };
+  function loadSounds() {
+    try { return JSON.parse(fs.readFileSync(DATA_SOUNDS, 'utf8')); }
+    catch (e) { return { boot: null, shutdown: null }; }
+  }
+  function saveSounds(d) {
+    fs.mkdirSync(path.dirname(DATA_SOUNDS), { recursive: true });
+    fs.writeFileSync(DATA_SOUNDS, JSON.stringify(d, null, 2));
+  }
+  try { fs.mkdirSync(SOUNDS_DIR, { recursive: true }); } catch (e) {}
+  if (!fs.existsSync(DATA_SOUNDS)) saveSounds({ boot: null, shutdown: null });
+
+  if (p === '/api/sounds' && req.method === 'GET') {
+    const s = loadSounds();
+    return sendJSON(res, 200, {
+      boot: s.boot ? '/assets/media/sounds/' + s.boot : null,
+      shutdown: s.shutdown ? '/assets/media/sounds/' + s.shutdown : null
+    });
+  }
+  if (p === '/api/admin/sound' && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const b = await readBody(req);
+    const slot = b.slot === 'shutdown' ? 'shutdown' : 'boot';
+    const data = String(b.data || '');
+    const m = data.match(/^data:([a-z0-9\/+.-]+);base64,([A-Za-z0-9+/=]+)$/i);
+    if (!m) return sendJSON(res, 400, { error: '仅支持 base64 dataURL 上传' });
+    const mime = m[1].toLowerCase();
+    const ext = SOUND_MIMES[mime];
+    if (!ext) return sendJSON(res, 400, { error: '不支持的音频格式：' + mime });
+    const approx = Math.floor(m[2].length * 0.75);
+    if (approx > 5 * 1024 * 1024) return sendJSON(res, 400, { error: '音效文件超过 5MB' });
+    const file = slot + '.' + ext;
+    try { fs.mkdirSync(SOUNDS_DIR, { recursive: true }); fs.writeFileSync(path.join(SOUNDS_DIR, file), Buffer.from(m[2], 'base64')); }
+    catch (e) { return sendJSON(res, 500, { error: '保存失败：' + e.message }); }
+    const d = loadSounds();
+    // 切换格式时清理旧文件
+    if (d[slot] && d[slot] !== file) { try { fs.unlinkSync(path.join(SOUNDS_DIR, d[slot])); } catch (e) {} }
+    d[slot] = file; saveSounds(d);
+    return sendJSON(res, 200, { ok: true, slot, url: '/assets/media/sounds/' + file });
+  }
+  const msd = p.match(/^\/api\/admin\/sound\/([^/]+)\/delete$/);
+  if (msd && req.method === 'POST') {
+    if (!isAdmin) return sendJSON(res, 403, { error: '需要管理员权限' });
+    const slot = msd[1] === 'shutdown' ? 'shutdown' : 'boot';
+    const d = loadSounds();
+    if (d[slot]) { try { fs.unlinkSync(path.join(SOUNDS_DIR, d[slot])); } catch (e) {} d[slot] = null; saveSounds(d); }
+    return sendJSON(res, 200, { ok: true, slot });
+  }
+
   // === 内置浏览器代理 ===
   if (p === '/api/proxy' && req.method === 'GET') {
     return proxyFetch(u.searchParams.get('url'), res, 0);
@@ -919,3 +1022,77 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log('Lunahub 论坛已启动： http://localhost:' + PORT);
 });
+
+/* ---------- 围棋联机（WebSocket，复用 3000 端口） ---------- */
+const wss = new WS.Server({ server, path: WS_PATH });
+const rooms = new Map(); // code -> { board, turn, players: [ws1, ws2], seq }
+
+function genCode() {
+  let c;
+  do { c = Math.random().toString(36).slice(2, 7).toUpperCase(); } while (rooms.has(c));
+  return c;
+}
+
+wss.on('connection', (ws, req) => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+  ws.on('message', (raw) => {
+    let m;
+    try { m = JSON.parse(raw); } catch (e) { return; }
+    if (m.type === 'create') {
+      const code = genCode();
+      rooms.set(code, { board: Array(19 * 19).fill(0), turn: 1, players: [ws], seq: 0 });
+      ws.room = code; ws.color = 1;
+      ws.send(JSON.stringify({ type: 'created', code, color: 1 }));
+    } else if (m.type === 'join') {
+      const r = rooms.get(String(m.code || '').toUpperCase());
+      if (!r) { ws.send(JSON.stringify({ type: 'error', msg: '房间不存在' })); return; }
+      if (r.players.length >= 2) { ws.send(JSON.stringify({ type: 'error', msg: '房间已满' })); return; }
+      r.players.push(ws); ws.room = String(m.code).toUpperCase(); ws.color = 2;
+      ws.send(JSON.stringify({ type: 'joined', code: String(m.code).toUpperCase(), color: 2, board: r.board, turn: r.turn }));
+      r.players[0].send(JSON.stringify({ type: 'start' }));
+    } else if (m.type === 'move') {
+      const r = ws.room && rooms.get(ws.room);
+      if (!r) return;
+      const i = m.i;
+      if (!Number.isInteger(i) || i < 0 || i >= 19 * 19) return;
+      if (r.turn !== ws.color) return;          // 只能走自己的颜色
+      if (r.board[i] !== 0) return;            // 已有子
+      r.board[i] = ws.color;
+      r.turn = ws.color === 1 ? 2 : 1;
+      r.seq++;
+      const payload = JSON.stringify({ type: 'move', i, color: ws.color, turn: r.turn, seq: r.seq });
+      r.players.forEach(p => { if (p.readyState === WS.OPEN) p.send(payload); });
+    } else if (m.type === 'reset') {
+      const r = ws.room && rooms.get(ws.room);
+      if (!r) return;
+      r.board = Array( 19 * 19).fill(0); r.turn = 1; r.seq++;
+      const payload = JSON.stringify({ type: 'reset', turn: 1, seq: r.seq });
+      r.players.forEach(p => { if (p.readyState === WS.OPEN) p.send(payload); });
+    } else if (m.type === 'leave') {
+      const r = ws.room && rooms.get(ws.room);
+      if (r) {
+        const payload = JSON.stringify({ type: 'opponentLeft' });
+        r.players.forEach(p => { if (p !== ws && p.readyState === WS.OPEN) p.send(payload); });
+        rooms.delete(ws.room);
+      }
+    }
+  });
+  ws.on('close', () => {
+    const r = ws.room && rooms.get(ws.room);
+    if (r) {
+      const payload = JSON.stringify({ type: 'opponentLeft' });
+      r.players.forEach(p => { if (p !== ws && p.readyState === WS.OPEN) p.send(payload); });
+      rooms.delete(ws.room);
+    }
+  });
+});
+
+// 心跳清理
+const wsTimer = setInterval(() => {
+  wss.clients.forEach(ws => {
+    if (!ws.isAlive) return ws.terminate();
+    ws.isAlive = false; ws.ping();
+  });
+}, 30000);
+wss.on('close', () => clearInterval(wsTimer));
